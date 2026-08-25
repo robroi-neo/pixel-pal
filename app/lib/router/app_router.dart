@@ -1,0 +1,77 @@
+import 'dart:async';
+
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:go_router/go_router.dart';
+
+import '../screens/forgot_password_screen.dart';
+import '../screens/home_screen.dart';
+import '../screens/login_screen.dart';
+import '../screens/register_screen.dart';
+import '../services/auth_service.dart';
+
+class AppRoutes {
+  AppRoutes._();
+
+  static const login = '/login';
+  static const register = '/register';
+  static const forgotPassword = '/forgot-password';
+  static const home = '/home';
+}
+
+/// Builds the app's router with an auth gate: signed-out users are bounced
+/// to /login, signed-in users are bounced away from the auth screens to
+/// /home. Re-evaluates automatically whenever [authService]'s auth state
+/// changes (sign in, register, sign out) via [GoRouterRefreshStream] — no
+/// screen needs to call `context.go` after a successful sign-in.
+GoRouter buildAppRouter(AuthService authService) {
+  return GoRouter(
+    initialLocation: AppRoutes.login,
+    refreshListenable: GoRouterRefreshStream(authService.authStateChanges),
+    redirect: (context, state) {
+      final loggedIn = authService.currentUser != null;
+      final onAuthScreen = state.matchedLocation == AppRoutes.login ||
+          state.matchedLocation == AppRoutes.register ||
+          state.matchedLocation == AppRoutes.forgotPassword;
+
+      if (!loggedIn && !onAuthScreen) return AppRoutes.login;
+      if (loggedIn && onAuthScreen) return AppRoutes.home;
+      return null;
+    },
+    routes: [
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (context, state) => const LoginScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.register,
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        builder: (context, state) => const ForgotPasswordScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.home,
+        builder: (context, state) => const HomeScreen(),
+      ),
+    ],
+  );
+}
+
+/// Bridges a [Stream] (Firebase's authStateChanges) into a [Listenable]
+/// so GoRouter re-evaluates `redirect` whenever auth state changes.
+class GoRouterRefreshStream extends ChangeNotifier {
+  GoRouterRefreshStream(Stream<User?> stream) {
+    notifyListeners();
+    _subscription = stream.listen((_) => notifyListeners());
+  }
+
+  late final StreamSubscription<User?> _subscription;
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
+  }
+}

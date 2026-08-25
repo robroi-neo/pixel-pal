@@ -1,0 +1,24 @@
+name: app
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  cloud_firestore: ^6.8.0
+  cloud_functions: ^6.3.6
+  firebase_auth: ^6.5.7
+  firebase_core: ^4.13.0
+  flutter:
+    sdk: flutter
+  go_router: ^17.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
