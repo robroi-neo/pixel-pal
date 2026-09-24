@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../router/app_router.dart';
@@ -8,19 +7,20 @@ import '../theme/app_dimens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/auth_error_banner.dart';
 
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+/// The email + password sign-in form, reached from the landing screen's
+/// "Already have an account? Log in" link (see [LoginScreen] in
+/// login_screen.dart, which is the actual Design.md §5 "Sign in" screen).
+class EmailLoginScreen extends StatefulWidget {
+  const EmailLoginScreen({super.key});
 
   @override
-  State<RegisterScreen> createState() => _RegisterScreenState();
+  State<EmailLoginScreen> createState() => _EmailLoginScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen> {
+class _EmailLoginScreenState extends State<EmailLoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _confirmController = TextEditingController();
   final _authService = AuthService();
 
   String? _errorMessage;
@@ -28,10 +28,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _confirmController.dispose();
     super.dispose();
   }
 
@@ -39,13 +37,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _errorMessage = null);
     try {
-      await _authService.register(
+      await _authService.signIn(
         email: _emailController.text,
         password: _passwordController.text,
-        fullName: _nameController.text,
       );
-      // Registering also signs the user in — GoRouter's redirect takes
-      // it from here, same as login.
+      // GoRouter's redirect (driven by authStateChanges) takes it from
+      // here — no manual navigation needed on success.
     } on AuthException catch (e) {
       setState(() => _errorMessage = e.message);
     }
@@ -61,6 +58,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_outlined),
+          onPressed: () => context.go(AppRoutes.login),
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -73,12 +76,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      'Create your account',
+                      'Welcome back',
                       style: Theme.of(context).textTheme.headlineMedium,
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Text(
-                      'Draw, guess, and play with your friends.',
+                      'Sign in to keep playing.',
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: AppSpacing.xl),
@@ -86,16 +89,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       AuthErrorBanner(message: _errorMessage!),
                       const SizedBox(height: AppSpacing.md),
                     ],
-                    TextFormField(
-                      controller: _nameController,
-                      textCapitalization: TextCapitalization.words,
-                      autofillHints: const [AutofillHints.name],
-                      decoration: const InputDecoration(labelText: 'Full name'),
-                      validator: (value) => (value == null || value.trim().isEmpty)
-                          ? 'Enter your name'
-                          : null,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -107,7 +100,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
-                      autofillHints: const [AutofillHints.newPassword],
+                      autofillHints: const [AutofillHints.password],
                       decoration: InputDecoration(
                         labelText: 'Password',
                         suffixIcon: IconButton(
@@ -121,39 +114,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                       ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'Enter a password';
-                        if (value.length < 6) return 'Use at least 6 characters';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    TextFormField(
-                      controller: _confirmController,
-                      obscureText: _obscurePassword,
-                      decoration: const InputDecoration(
-                        labelText: 'Confirm password',
-                      ),
-                      validator: (value) => (value != _passwordController.text)
-                          ? "Passwords don't match"
+                      validator: (value) => (value == null || value.isEmpty)
+                          ? 'Enter your password'
                           : null,
                     ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () => context.push(AppRoutes.forgotPassword),
+                        child: const Text('Forgot password?'),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppButton(label: 'Sign in', onPressed: _submit),
                     const SizedBox(height: AppSpacing.lg),
-                    AppButton(label: 'Create account', onPressed: _submit),
-                    const SizedBox(height: AppSpacing.lg),
-                    // Wrap, not Row — see the comment on the equivalent
-                    // footer in login_screen.dart.
+                    // Wrap, not Row: at large system font scaling this
+                    // text can need two lines on a narrow phone — Wrap
+                    // reflows instead of overflowing.
                     Wrap(
                       alignment: WrapAlignment.center,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          'Already have an account?',
+                          "Don't have an account?",
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         TextButton(
-                          onPressed: () => context.go(AppRoutes.emailLogin),
-                          child: const Text('Sign in'),
+                          onPressed: () => context.push(AppRoutes.register),
+                          child: const Text('Register'),
                         ),
                       ],
                     ),

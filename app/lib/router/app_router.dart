@@ -4,7 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
+import '../screens/email_login_screen.dart';
 import '../screens/forgot_password_screen.dart';
+import '../screens/game_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
@@ -13,11 +15,23 @@ import '../services/auth_service.dart';
 class AppRoutes {
   AppRoutes._();
 
+  /// Design.md §5 "Sign in" — the landing screen (mark, wordmark, Google
+  /// primary / email secondary). Not a form; see [emailLogin] for that.
   static const login = '/login';
+  static const emailLogin = '/login/email';
   static const register = '/register';
   static const forgotPassword = '/forgot-password';
   static const home = '/home';
+  static const game = '/game';
 }
+
+/// Dev-only escape hatch: when true, the auth gate below treats every user
+/// as signed in, so the app lands straight on /home without touching
+/// Firebase Auth or the emulator. Only takes effect in debug builds —
+/// `kDebugMode` is `false` in release/profile builds, so this can never
+/// ship as a real auth bypass. Flip to `false` to test the real sign-in
+/// flow locally.
+const bool kDevBypassAuth = false;
 
 /// Builds the app's router with an auth gate: signed-out users are bounced
 /// to /login, signed-in users are bounced away from the auth screens to
@@ -26,11 +40,14 @@ class AppRoutes {
 /// screen needs to call `context.go` after a successful sign-in.
 GoRouter buildAppRouter(AuthService authService) {
   return GoRouter(
-    initialLocation: AppRoutes.login,
+    initialLocation: AppRoutes.home,
     refreshListenable: GoRouterRefreshStream(authService.authStateChanges),
     redirect: (context, state) {
-      final loggedIn = authService.currentUser != null;
-      final onAuthScreen = state.matchedLocation == AppRoutes.login ||
+      final loggedIn =
+          (kDebugMode && kDevBypassAuth) || authService.currentUser != null;
+      final onAuthScreen =
+          state.matchedLocation == AppRoutes.login ||
+          state.matchedLocation == AppRoutes.emailLogin ||
           state.matchedLocation == AppRoutes.register ||
           state.matchedLocation == AppRoutes.forgotPassword;
 
@@ -44,6 +61,10 @@ GoRouter buildAppRouter(AuthService authService) {
         builder: (context, state) => const LoginScreen(),
       ),
       GoRoute(
+        path: AppRoutes.emailLogin,
+        builder: (context, state) => const EmailLoginScreen(),
+      ),
+      GoRoute(
         path: AppRoutes.register,
         builder: (context, state) => const RegisterScreen(),
       ),
@@ -54,6 +75,10 @@ GoRouter buildAppRouter(AuthService authService) {
       GoRoute(
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.game,
+        builder: (context, state) => const GameScreen(),
       ),
     ],
   );

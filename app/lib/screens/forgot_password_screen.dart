@@ -54,7 +54,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_outlined),
-          onPressed: () => context.go(AppRoutes.login),
+          onPressed: () => context.go(AppRoutes.emailLogin),
         ),
       ),
       body: SafeArea(
@@ -82,7 +82,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     AppButton(
                       label: 'Back to sign in',
                       secondary: true,
-                      onPressed: () async => context.go(AppRoutes.login),
+                      onPressed: () async => context.go(AppRoutes.emailLogin),
                     ),
                   ] else ...[
                     Form(

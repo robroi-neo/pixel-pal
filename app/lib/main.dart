@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'firebase_options.dart';
 import 'router/app_router.dart';
 import 'services/auth_service.dart';
+import 'theme/app_accent.dart';
 import 'theme/app_theme.dart';
 
 void main() async {
@@ -31,11 +32,14 @@ class MainApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp.router(
-      theme: AppTheme.light,
-      // theme: AppTheme.dark, // add this + a themeMode once dark mode ships
-      routerConfig: buildAppRouter(AuthService()),
-      debugShowCheckedModeBanner: false,
+    final router = buildAppRouter(AuthService());
+    return ValueListenableBuilder<Color>(
+      valueListenable: AppAccent.notifier,
+      builder: (context, accent, _) => MaterialApp.router(
+        theme: AppTheme.build(accent),
+        routerConfig: router,
+        debugShowCheckedModeBanner: false,
+      ),
     );
   }
 }

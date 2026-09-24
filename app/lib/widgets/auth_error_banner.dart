@@ -4,9 +4,9 @@ import '../theme/app_dimens.dart';
 import '../theme/app_tokens.dart';
 
 /// Inline error banner for auth screens. Message text comes from
-/// [AuthException], which is already plain and actionable per style.md's
-/// voice guidance — this widget just gives it the red/error surface
-/// style.md reserves for real failures (not routine validation nagging).
+/// [AuthException], which is already plain and actionable — this widget
+/// just gives it the error surface Design.md reserves for real failures
+/// (not routine validation nagging).
 class AuthErrorBanner extends StatelessWidget {
   const AuthErrorBanner({super.key, required this.message});
 

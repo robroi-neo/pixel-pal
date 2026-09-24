@@ -1,14 +1,24 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 /// Thin wrapper around [FirebaseAuth] — screens never touch the Firebase
 /// SDK directly, only this service. Keeps auth logic in one place and
-/// makes swapping/mocking the provider a one-file change, mirroring the
-/// `services/` pattern from plan_firebase.md.
+/// makes swapping/mocking the provider a one-file change.
 class AuthService {
   AuthService({FirebaseAuth? firebaseAuth})
     : _auth = firebaseAuth ?? FirebaseAuth.instance;
 
   final FirebaseAuth _auth;
+
+  // `GoogleSignIn.instance.initialize()` must be called exactly once for
+  // the process's lifetime before any other GoogleSignIn method — this
+  // caches that call across AuthService instances (screens each construct
+  // their own `AuthService()`) rather than tracking init state per-instance.
+  static Future<void>? _googleSignInInit;
+
+  static Future<void> _ensureGoogleSignInInitialized() {
+    return _googleSignInInit ??= GoogleSignIn.instance.initialize();
+  }
 
   User? get currentUser => _auth.currentUser;
 
@@ -47,6 +57,45 @@ class AuthService {
     }
   }
 
+  /// Signs in with Google via the platform's native account picker, then
+  /// exchanges the resulting ID token for a Firebase credential.
+  ///
+  /// Requires OAuth client IDs to be configured in the Firebase/Google
+  /// console for each platform this ships on — without that, this throws
+  /// a generic [AuthException] rather than a raw plugin error. On web,
+  /// `google_sign_in` requires its own rendered button rather than a
+  /// custom one (see [GoogleSignIn.supportsAuthenticate]); until that's
+  /// wired up separately, web users see the same friendly fallback.
+  Future<void> signInWithGoogle() async {
+    try {
+      await _ensureGoogleSignInInitialized();
+      final googleSignIn = GoogleSignIn.instance;
+      if (!googleSignIn.supportsAuthenticate()) {
+        throw AuthException(
+          "Google sign-in isn't set up on this platform yet — use email instead.",
+        );
+      }
+      final account = await googleSignIn.authenticate();
+      final idToken = account.authentication.idToken;
+      await _auth.signInWithCredential(
+        GoogleAuthProvider.credential(idToken: idToken),
+      );
+    } on AuthException {
+      rethrow;
+    } on GoogleSignInException catch (e) {
+      if (e.code == GoogleSignInExceptionCode.canceled) return;
+      throw AuthException("Couldn't sign in with Google — try again.");
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_message(e));
+    } catch (_) {
+      // Covers platform-channel failures — most likely Google sign-in
+      // isn't finished configuring yet for this platform/environment.
+      throw AuthException(
+        "Google sign-in isn't finished setting up yet — use email instead.",
+      );
+    }
+  }
+
   Future<void> sendPasswordResetEmail({required String email}) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
@@ -57,9 +106,8 @@ class AuthService {
 
   Future<void> signOut() => _auth.signOut();
 
-  /// Maps Firebase's error codes to plain, actionable copy — per
-  /// style.md's voice guidance: say what happened and what to do next,
-  /// never "Error: request failed."
+  /// Maps Firebase's error codes to plain, actionable copy: say what
+  /// happened and what to do next, never "Error: request failed."
   String _message(FirebaseAuthException e) {
     switch (e.code) {
       case 'invalid-email':

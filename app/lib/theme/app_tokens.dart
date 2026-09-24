@@ -1,111 +1,95 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
 
-/// Design tokens that don't have a natural home in Flutter's [ColorScheme]
-/// — income/expense semantics, warning/error surface pairs, and the
-/// transaction-amount text style. Registered on `ThemeData.extensions` in
-/// `app_theme.dart`. Read it like this from any widget:
+/// Design tokens Design.md specifies that don't have a natural home in
+/// Flutter's [ColorScheme] — the error banner surface, the "attention"
+/// chip fill (ink fill + accent text, per §3 "Chip"), the hard offset
+/// shadow (§2, "Shadow means 'this needs you'" — §4), and the Silkscreen
+/// numeral style reserved for scores only (§4, "The UI must not be
+/// pixelated"). Registered on `ThemeData.extensions` in `app_theme.dart`.
 ///
+/// Read it like this from any widget:
 /// ```dart
 /// final tokens = Theme.of(context).extension<AppTokens>()!;
-/// Text('+ ₱400', style: tokens.amount.copyWith(color: tokens.income));
+/// Container(decoration: BoxDecoration(boxShadow: tokens.hardShadow));
 /// ```
 ///
-/// Being a real `ThemeExtension` (not just a static class) means it lerps
-/// correctly if this app ever animates between themes, and it's the right
-/// place to add `AppTokens.dark` later without touching call sites.
+/// Built per-accent by [AppTokens.build] rather than a single fixed
+/// constant, since [chipFg] tracks the app's changeable accent color
+/// (see `app_accent.dart`) — everywhere else Design.md's "yellow" role
+/// shows up as text/foreground rather than the screen background.
 @immutable
 class AppTokens extends ThemeExtension<AppTokens> {
   const AppTokens({
-    required this.income,
-    required this.expense,
-    required this.warningBg,
-    required this.warningFg,
     required this.errorBg,
     required this.errorFg,
     required this.chipBg,
     required this.chipFg,
-    required this.hairline,
-    required this.iconMuted,
-    required this.iconActive,
-    required this.amount,
+    required this.scoreNumeral,
+    required this.hardShadow,
   });
 
-  /// Income amounts only.
-  final Color income;
-
-  /// Regular expense amounts. Deliberately neutral (gray/900), **not red**
-  /// — see style.md: coloring every grocery run red makes the whole feed
-  /// read as a wall of alarms by day 2. Red is reserved for real errors.
-  final Color expense;
-
-  final Color warningBg;
-  final Color warningFg;
+  /// Inline error banner fill — neutral, per Design.md §2: `error` is
+  /// reserved for text only, "never a deadline, never a score" and never
+  /// a flush background either.
   final Color errorBg;
+
+  /// Inline error banner / validation text.
   final Color errorFg;
 
-  /// Category chip fill/text (pill shape).
+  /// "Attention" chip fill — ink, per §3 ("Ink fill with yellow text =
+  /// attention").
   final Color chipBg;
+
+  /// "Attention" chip text — tracks the current accent color.
   final Color chipFg;
 
-  /// 0.5dp row dividers — rows separate with hairlines, not shadows.
-  final Color hairline;
+  /// Score numerals only (ranks, points, multipliers) — Silkscreen 400,
+  /// per §2 "Type" and §4 "The UI must not be pixelated". Nothing else in
+  /// the app should use this style.
+  final TextStyle scoreNumeral;
 
-  final Color iconMuted;
-  final Color iconActive;
+  /// The one hard offset shadow in the system — `4px 4px 0 ink`, never
+  /// blurred. Apply it only to the card/tile that needs the user's
+  /// action; settled surfaces stay flat (§4, "Shadow is a call to action,
+  /// not decoration").
+  final List<BoxShadow> hardShadow;
 
-  /// Transaction row amount — 15sp/500. The one text role in style.md
-  /// that doesn't map cleanly onto Flutter's standard TextTheme slots.
-  final TextStyle amount;
-
-  static const light = AppTokens(
-    income: AppColors.teal600,
-    expense: AppColors.gray900,
-    warningBg: AppColors.amber50,
-    warningFg: AppColors.amber600,
-    errorBg: AppColors.red50,
-    errorFg: AppColors.red600,
-    chipBg: AppColors.teal50,
-    chipFg: AppColors.teal800,
-    hairline: AppColors.gray100,
-    iconMuted: AppColors.gray600,
-    iconActive: AppColors.teal600,
-    amount: TextStyle(
-      fontSize: 15,
-      fontWeight: FontWeight.w500,
-      color: AppColors.gray900,
-    ),
-  );
+  static AppTokens build(Color accent) {
+    return AppTokens(
+      errorBg: AppColors.white,
+      errorFg: AppColors.error,
+      chipBg: AppColors.ink,
+      chipFg: accent,
+      scoreNumeral: GoogleFonts.silkscreen(
+        fontSize: 19,
+        fontWeight: FontWeight.w400,
+        color: AppColors.ink,
+      ),
+      hardShadow: const [
+        BoxShadow(color: AppColors.ink, offset: Offset(4, 4), blurRadius: 0),
+      ],
+    );
+  }
 
   @override
   AppTokens copyWith({
-    Color? income,
-    Color? expense,
-    Color? warningBg,
-    Color? warningFg,
     Color? errorBg,
     Color? errorFg,
     Color? chipBg,
     Color? chipFg,
-    Color? hairline,
-    Color? iconMuted,
-    Color? iconActive,
-    TextStyle? amount,
+    TextStyle? scoreNumeral,
+    List<BoxShadow>? hardShadow,
   }) {
     return AppTokens(
-      income: income ?? this.income,
-      expense: expense ?? this.expense,
-      warningBg: warningBg ?? this.warningBg,
-      warningFg: warningFg ?? this.warningFg,
       errorBg: errorBg ?? this.errorBg,
       errorFg: errorFg ?? this.errorFg,
       chipBg: chipBg ?? this.chipBg,
       chipFg: chipFg ?? this.chipFg,
-      hairline: hairline ?? this.hairline,
-      iconMuted: iconMuted ?? this.iconMuted,
-      iconActive: iconActive ?? this.iconActive,
-      amount: amount ?? this.amount,
+      scoreNumeral: scoreNumeral ?? this.scoreNumeral,
+      hardShadow: hardShadow ?? this.hardShadow,
     );
   }
 
@@ -113,18 +97,14 @@ class AppTokens extends ThemeExtension<AppTokens> {
   AppTokens lerp(ThemeExtension<AppTokens>? other, double t) {
     if (other is! AppTokens) return this;
     return AppTokens(
-      income: Color.lerp(income, other.income, t)!,
-      expense: Color.lerp(expense, other.expense, t)!,
-      warningBg: Color.lerp(warningBg, other.warningBg, t)!,
-      warningFg: Color.lerp(warningFg, other.warningFg, t)!,
       errorBg: Color.lerp(errorBg, other.errorBg, t)!,
       errorFg: Color.lerp(errorFg, other.errorFg, t)!,
       chipBg: Color.lerp(chipBg, other.chipBg, t)!,
       chipFg: Color.lerp(chipFg, other.chipFg, t)!,
-      hairline: Color.lerp(hairline, other.hairline, t)!,
-      iconMuted: Color.lerp(iconMuted, other.iconMuted, t)!,
-      iconActive: Color.lerp(iconActive, other.iconActive, t)!,
-      amount: TextStyle.lerp(amount, other.amount, t)!,
+      scoreNumeral: TextStyle.lerp(scoreNumeral, other.scoreNumeral, t)!,
+      // Hard offset shadows are a fixed design constant, not something
+      // that's ever mid-transition — snap rather than interpolate.
+      hardShadow: t < 0.5 ? hardShadow : other.hardShadow,
     );
   }
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
-/// Spacing tokens (in logical pixels / dp).
+/// Spacing tokens (in logical pixels / dp). Not specified numerically by
+/// Design.md — kept as a generic scale for screens/widgets to compose
+/// with the fixed tokens below.
 class AppSpacing {
   AppSpacing._();
 
@@ -11,15 +13,29 @@ class AppSpacing {
   static const xl = 24.0; // between sections
 }
 
-/// Corner radius tokens.
+/// Border widths. Design.md §2 "Structure": 3px on cards, buttons, tiles,
+/// tools, swatches; 2px on chips and small pills.
+class AppBorders {
+  AppBorders._();
+
+  static const thick = 3.0;
+  static const thin = 2.0;
+}
+
+/// Corner radius tokens, per Design.md §2 "Structure".
 class AppRadius {
   AppRadius._();
 
-  static const control = 8.0; // buttons, inputs, chips
-  static const card = 12.0; // cards, sheets
+  static const card = 14.0;
+  static const control = 10.0; // buttons and tools (10–11px)
+  static const tile = 5.0; // letter tiles and swatches
+  static const chip = 999.0;
+  static const phoneScreen = 22.0;
 
-  static const controlRadius = BorderRadius.all(Radius.circular(control));
   static const cardRadius = BorderRadius.all(Radius.circular(card));
+  static const controlRadius = BorderRadius.all(Radius.circular(control));
+  static const tileRadius = BorderRadius.all(Radius.circular(tile));
+  static const chipRadius = BorderRadius.all(Radius.circular(chip));
 }
 
 /// Fixed component sizes.
@@ -29,23 +45,19 @@ class AppSizes {
   /// Minimum tappable area for any control — buttons, chips, icon buttons.
   static const minTouchTarget = 44.0;
 
-  /// The record/mic button. Never let this shrink below [minTouchTarget],
-  /// even under system font scaling.
-  static const micButton = 56.0;
-
-  /// Transaction row leading icon chip.
-  static const txIconChip = 32.0;
-
   /// Standard icon size; use [iconMax] only for decorative/large icons.
   static const icon = 20.0;
   static const iconMax = 24.0;
 
   /// Text input height.
-  static const inputHeight = 40.0;
+  static const inputHeight = 44.0;
+
+  /// Letter tile, per Design.md §3 ("Letter tile").
+  static const letterTileWidth = 33.0;
+  static const letterTileHeight = 40.0;
 }
 
-/// Motion tokens. Style.md: "minimal and functional only... no
-/// bouncy/overshoot easing — keep it calm."
+/// Motion tokens.
 class AppMotion {
   AppMotion._();
 

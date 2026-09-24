@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../router/app_router.dart';
@@ -7,7 +6,12 @@ import '../services/auth_service.dart';
 import '../theme/app_dimens.dart';
 import '../widgets/app_button.dart';
 import '../widgets/auth_error_banner.dart';
+import '../widgets/pixel_mark.dart';
 
+/// Design.md §5 "Sign in": pixel-art mark, wordmark, Google primary /
+/// email secondary. The only pixel art outside a canvas frame is the app
+/// mark — a logo, not user artwork. Tagline carries the premise:
+/// unhurried, low-stakes.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -16,29 +20,13 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   final _authService = AuthService();
-
   String? _errorMessage;
-  bool _obscurePassword = true;
 
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+  Future<void> _continueWithGoogle() async {
     setState(() => _errorMessage = null);
     try {
-      await _authService.signIn(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
+      await _authService.signInWithGoogle();
       // GoRouter's redirect (driven by authStateChanges) takes it from
       // here — no manual navigation needed on success.
     } on AuthException catch (e) {
@@ -46,103 +34,85 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  String? _validateEmail(String? value) {
-    if (value == null || value.trim().isEmpty) return 'Enter your email';
-    final pattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-    if (!pattern.hasMatch(value.trim())) return 'Enter a valid email';
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'Welcome back',
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      'Sign in to keep tracking your spending.',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    if (_errorMessage != null) ...[
-                      AuthErrorBanner(message: _errorMessage!),
-                      const SizedBox(height: AppSpacing.md),
-                    ],
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      autofillHints: const [AutofillHints.email],
-                      decoration: const InputDecoration(labelText: 'Email'),
-                      validator: _validateEmail,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: _obscurePassword,
-                      autofillHints: const [AutofillHints.password],
-                      decoration: InputDecoration(
-                        labelText: 'Password',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - AppSpacing.lg * 2,
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 400),
+                    // IntrinsicHeight gives the Column a concrete (tight)
+                    // height to lay `Spacer` out against — without it,
+                    // `Spacer`/`Expanded` throw inside the unbounded
+                    // height a SingleChildScrollView otherwise provides.
+                    child: IntrinsicHeight(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const SizedBox(height: AppSpacing.xl),
+                          const Center(child: PixelMark(size: 96)),
+                          const SizedBox(height: AppSpacing.lg),
+                          Text(
+                            'Pixel\nGuess',
+                            textAlign: TextAlign.center,
+                            style: textTheme.headlineMedium,
                           ),
-                          onPressed: () => setState(
-                            () => _obscurePassword = !_obscurePassword,
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            'Draw badly. Guess worse. Take all day.',
+                            textAlign: TextAlign.center,
+                            style: textTheme.bodyMedium,
                           ),
-                        ),
+                          const Spacer(),
+                          const SizedBox(height: AppSpacing.xl),
+                          if (_errorMessage != null) ...[
+                            AuthErrorBanner(message: _errorMessage!),
+                            const SizedBox(height: AppSpacing.md),
+                          ],
+                          AppButton(
+                            label: 'Continue with Google',
+                            onPressed: _continueWithGoogle,
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          AppButton(
+                            label: 'Sign up with email',
+                            secondary: true,
+                            onPressed: () async =>
+                                context.push(AppRoutes.register),
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Text(
+                                'Already have an account?',
+                                style: textTheme.bodySmall,
+                              ),
+                              TextButton(
+                                onPressed: () =>
+                                    context.push(AppRoutes.emailLogin),
+                                child: const Text('Log in'),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                      validator: (value) => (value == null || value.isEmpty)
-                          ? 'Enter your password'
-                          : null,
                     ),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: () => context.push(AppRoutes.forgotPassword),
-                        child: const Text('Forgot password?'),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    AppButton(label: 'Sign in', onPressed: _submit),
-                    const SizedBox(height: AppSpacing.lg),
-                    // Wrap, not Row: at 130% system font scaling (the
-                    // minimum style.md requires supporting) this text
-                    // can need two lines on a narrow phone — Wrap reflows
-                    // instead of overflowing.
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          "Don't have an account?",
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        TextButton(
-                          onPressed: () => context.push(AppRoutes.register),
-                          child: const Text('Register'),
-                        ),
-                      ],
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

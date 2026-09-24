@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../theme/app_colors.dart';
-
 /// A themed button that shows a spinner and disables itself while
 /// [onPressed] is awaiting — used on every auth screen so "sign in" /
 /// "create account" / "send reset link" don't each need their own
@@ -19,8 +17,9 @@ class AppButton extends StatefulWidget {
   final String label;
   final Future<void> Function() onPressed;
 
-  /// true = secondary style (outlined). false = primary (filled teal).
-  /// style.md: avoid more than one primary button per screen.
+  /// true = secondary style (outlined). false = primary (ink fill, per
+  /// Design.md §3). Design.md §4: avoid more than one primary button per
+  /// screen.
   final bool secondary;
 
   @override
@@ -42,7 +41,11 @@ class _AppButtonState extends State<AppButton> {
 
   @override
   Widget build(BuildContext context) {
-    final spinnerColor = widget.secondary ? AppColors.gray900 : AppColors.white;
+    final scheme = Theme.of(context).colorScheme;
+    // Primary button is ink-fill/accent-text; secondary is ink-on-transparent.
+    // Matching the spinner to the button's own foreground keeps it in sync
+    // if the accent color changes at runtime.
+    final spinnerColor = widget.secondary ? scheme.onSurface : scheme.onSecondary;
 
     final child = _loading
         ? SizedBox(
