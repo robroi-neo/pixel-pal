@@ -1,6 +1,7 @@
 # Project Instructions
 - Make Minimal changes unless stated otherwise.
-
+- Ensure that any firebase modifications or any backend features can be done with only SPARK plan. I can accept tradeoffs. 
+- DO NOT USE CLOUDBUILD.GOOGLEAPIS.COM
 
 ## UI Changes
 

@@ -2,26 +2,118 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /transactions/{transactionId} {
-      allow read, update, delete: if request.auth != null
-        && request.auth.uid == resource.data.userId;
+    // Spark plan can't run Cloud Functions (any generation needs Blaze,
+    // for Cloud Build/Artifact Registry — a platform requirement, not a
+    // usage-cost one), so this is written by the client itself right
+    // after sign-in (see services/auth_service.dart), not a trusted
+    // server trigger. A user can only write/read their own profile.
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+
+      // `resource` (the prior doc) doesn't exist yet on create, so this
+      // can't share an `update`'s diff-based check — only validate the
+      // new doc's own shape here.
       allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
+        && request.auth.uid == uid
+        && request.resource.data.keys()
+            .hasOnly(['displayName', 'email', 'photoUrl', 'createdAt']);
+
+      // `createdAt` is set once on create and never moves after.
+      allow update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['displayName', 'email', 'photoUrl'])
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false;
     }
 
-    match /categories/{categoryId} {
-      allow read: if request.auth != null
-        && (resource.data.userId == null || resource.data.userId == request.auth.uid);
+    // Invite-code -> roomId lookup, created by the client alongside
+    // rooms/{roomId} (see services/room_service.dart). Without a Cloud
+    // Function to do this transactionally server-side, a malicious
+    // client could in principle squat a code pointing at an unrelated
+    // roomId — the worst case is a wasted code, not unauthorized data
+    // access, since rooms/{roomId} below is still independently gated.
+    match /roomCodes/{code} {
+      allow read: if request.auth != null;
       allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
-      allow update, delete: if request.auth != null
-        && request.auth.uid == resource.data.userId;
+        && request.resource.data.keys().hasOnly(['roomId', 'createdAt'])
+        && request.resource.data.roomId is string
+        && request.resource.data.roomId.size() > 0
+        && request.resource.data.createdAt == request.time;
+      allow update, delete: if false;
     }
 
-    // Temporary: used by FirestoreTestPage to verify connectivity.
-    // Remove this match block along with lib/firestore_test_page.dart once confirmed.
-    match /connection_test/{docId} {
-      allow read, write: if request.auth != null;
+    // Was "all writes go through createRoom/joinRoom callables"
+    // (Implementations.md "Standing rules") — on Spark there's no
+    // Cloud Functions to do that, so these rules are the enforcement
+    // instead. `create` pins every field a new room can start with;
+    // `update` allows exactly one shape of change — the caller joining
+    // as a new member — and nothing else about the room may move.
+    match /rooms/{roomId} {
+      // Any signed-in user, not just members — joinRoom's transaction
+      // (services/room_service.dart) has to read a room to check it isn't
+      // full *before* the joiner is a member, so a members-only read rule
+      // would lock joining out entirely. Nothing in a room doc is
+      // sensitive (name/canvas/round length/member initials) — the actual
+      // access control is the invite code, not this read.
+      allow read: if request.auth != null;
+
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly([
+              'name', 'code', 'canvasSize', 'roundLengthHours', 'ownerUid',
+              'memberCount', 'memberUids', 'memberPreview', 'createdAt',
+            ])
+        && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid]
+        && request.resource.data.memberCount == 1
+        && request.resource.data.memberPreview is list
+        && request.resource.data.memberPreview.size() == 1
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 40
+        && request.resource.data.code is string
+        && request.resource.data.code.size() == 6
+        && request.resource.data.canvasSize in [16, 32, 64]
+        && request.resource.data.roundLengthHours in [12, 24, 48]
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if request.auth != null
+        && !(request.auth.uid in resource.data.memberUids)
+        && resource.data.memberUids.size() < 8
+        && request.resource.data.keys().hasOnly(resource.data.keys())
+        && request.resource.data.memberUids ==
+            resource.data.memberUids.concat([request.auth.uid])
+        && request.resource.data.memberCount == resource.data.memberCount + 1
+        && request.resource.data.memberPreview.size() >=
+            resource.data.memberPreview.size()
+        && request.resource.data.memberPreview.size() <=
+            resource.data.memberPreview.size() + 1
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.canvasSize == resource.data.canvasSize
+        && request.resource.data.roundLengthHours ==
+            resource.data.roundLengthHours
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false;
+
+      // Not read by the client — the room list uses the room doc's own
+      // denormalized memberPreview/memberCount instead of querying this
+      // subcollection. A member document exists mainly so a future
+      // Blaze upgrade has real per-member records to build on.
+      match /members/{uid} {
+        allow read: if false;
+        allow create: if request.auth != null
+          && request.auth.uid == uid
+          && request.resource.data.keys()
+              .hasOnly(['displayName', 'role', 'status', 'joinedAt'])
+          && request.resource.data.role in ['owner', 'member']
+          && request.resource.data.status == 'active'
+          && request.resource.data.joinedAt == request.time;
+        allow update, delete: if false;
+      }
     }
 
   }

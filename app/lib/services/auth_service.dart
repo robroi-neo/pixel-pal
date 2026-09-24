@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -28,10 +29,11 @@ class AuthService {
 
   Future<void> signIn({required String email, required String password}) async {
     try {
-      await _auth.signInWithEmailAndPassword(
+      final credential = await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
+      await _ensureUserProfile(credential.user!);
     } on FirebaseAuthException catch (e) {
       throw AuthException(_message(e));
     }
@@ -49,11 +51,41 @@ class AuthService {
         email: email.trim(),
         password: password,
       );
-      if (fullName.trim().isNotEmpty) {
-        await credential.user?.updateDisplayName(fullName.trim());
+      final trimmedName = fullName.trim();
+      if (trimmedName.isNotEmpty) {
+        await credential.user?.updateDisplayName(trimmedName);
       }
+      await _ensureUserProfile(
+        credential.user!,
+        displayNameOverride: trimmedName.isEmpty ? null : trimmedName,
+      );
     } on FirebaseAuthException catch (e) {
       throw AuthException(_message(e));
+    }
+  }
+
+  /// Writes/refreshes `users/{uid}` — the `onCreate` auth trigger that
+  /// would normally do this needs Cloud Functions (Blaze); on Spark this
+  /// is the client doing it right after sign-in instead. `createdAt` is
+  /// only ever set once (rules enforce `create`/`update` can't move it);
+  /// the other fields refresh on every sign-in. Never lets a Firestore
+  /// hiccup here block sign-in — this is supplementary, not the point of
+  /// the call.
+  Future<void> _ensureUserProfile(
+    User user, {
+    String? displayNameOverride,
+  }) async {
+    try {
+      final ref = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final snapshot = await ref.get();
+      await ref.set({
+        'displayName': displayNameOverride ?? user.displayName,
+        'email': user.email,
+        'photoUrl': user.photoURL,
+        if (!snapshot.exists) 'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+    } on FirebaseException {
+      // Non-fatal — see doc comment above.
     }
   }
 
@@ -77,9 +109,10 @@ class AuthService {
       }
       final account = await googleSignIn.authenticate();
       final idToken = account.authentication.idToken;
-      await _auth.signInWithCredential(
+      final credential = await _auth.signInWithCredential(
         GoogleAuthProvider.credential(idToken: idToken),
       );
+      await _ensureUserProfile(credential.user!);
     } on AuthException {
       rethrow;
     } on GoogleSignInException catch (e) {

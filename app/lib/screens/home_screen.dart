@@ -1,81 +1,35 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../models/room_summary.dart';
+import '../router/app_router.dart';
 import '../services/auth_service.dart';
+import '../services/room_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
 import '../theme/app_tokens.dart';
+import '../utils/dashed_path.dart';
+import '../utils/initials.dart';
 import '../widgets/app_avatar.dart';
+import 'join_room_sheet.dart';
 
-/// Design.md §5 "Room list": three states, each encoded three ways (chip /
-/// shadow / tint) — needs you, all in and waiting, paused. No member
-/// scores; this is a to-do list, not a scoreboard.
-enum _RoomStatus { needsYou, waiting, paused }
-
-class _RoomSummary {
-  const _RoomSummary({
-    required this.title,
-    required this.subtitle,
-    required this.status,
-    this.timeLabel,
-    this.members = const [],
-    this.overflowCount,
-    this.footer,
-  });
-
-  final String title;
-  final String subtitle;
-  final _RoomStatus status;
-
-  /// e.g. "18h left", "2d left" — null for a paused room (shows a pause
-  /// icon instead).
-  final String? timeLabel;
-
-  final List<String> members;
-
-  /// Extra members beyond the shown avatars, rendered as a "+N" chip.
-  final int? overflowCount;
-
-  /// e.g. "draw · 4 to guess", "all in, waiting" — null when paused.
-  final String? footer;
-}
-
-/// Static content only — no room data comes from Firestore yet. Wiring
-/// this up to real rooms, and making "New room or join code" and each
-/// room card actually navigate, is future work.
-class HomeScreen extends StatelessWidget {
+/// Reads the signed-in user's rooms live from Firestore — every room the
+/// user is a member of, whether they created it or joined it by code
+/// (`memberUids` doesn't distinguish the two). Room creation and joining
+/// happen client-side in `RoomService` (Spark plan has no Cloud
+/// Functions — see CLAUDE.md); this screen only ever reads.
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  static const _rooms = [
-    _RoomSummary(
-      title: 'Pixel pals',
-      subtitle: 'Round 12 · 5 players',
-      status: _RoomStatus.needsYou,
-      timeLabel: '18h left',
-      members: ['MR', 'JS', 'PF', 'TK'],
-      footer: 'draw · 4 to guess',
-    ),
-    _RoomSummary(
-      title: 'Work lot',
-      subtitle: 'Round 3 · 8 players',
-      status: _RoomStatus.waiting,
-      timeLabel: '2d left',
-      members: ['DN', 'SH'],
-      overflowCount: 6,
-      footer: 'all in, waiting',
-    ),
-    _RoomSummary(
-      title: 'Sunday sketch',
-      subtitle: 'Paused by Nico',
-      status: _RoomStatus.paused,
-    ),
-  ];
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
 
+class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
+    final user = AuthService().currentUser;
     final textTheme = Theme.of(context).textTheme;
-    final needsYouCount = _rooms
-        .where((r) => r.status == _RoomStatus.needsYou)
-        .length;
 
     return Scaffold(
       body: SafeArea(
@@ -88,22 +42,7 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Your rooms', style: textTheme.headlineMedium),
-                        const SizedBox(height: 4),
-                        Text(
-                          needsYouCount == 0
-                              ? "You're all caught up"
-                              : '$needsYouCount room${needsYouCount == 1 ? '' : 's'} '
-                                    'need${needsYouCount == 1 ? 's' : ''} you today',
-                          style: textTheme.bodySmall?.copyWith(
-                            color: AppColors.ink.withValues(alpha: 0.6),
-                          ),
-                        ),
-                      ],
-                    ),
+                    child: Text('Your rooms', style: textTheme.headlineMedium),
                   ),
                   const SizedBox(width: AppSpacing.sm),
                   GestureDetector(
@@ -111,16 +50,86 @@ class HomeScreen extends StatelessWidget {
                     // a long-press keeps it reachable for dev/testing
                     // without adding UI the design doesn't call for.
                     onLongPress: () => AuthService().signOut(),
-                    child: const AppAvatar(initials: 'AL', size: 40),
+                    child: AppAvatar(
+                      initials: initialsFor(user?.displayName),
+                      size: 40,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
-              for (final room in _rooms) ...[
-                _RoomCard(room: room, onTap: () {}),
-                const SizedBox(height: AppSpacing.md),
-              ],
-              _DashedBorderButton(label: 'New room or join code', onTap: () {}),
+              if (user == null)
+                Text(
+                  'Sign in to see your rooms.',
+                  style: textTheme.bodyMedium,
+                )
+              else
+                StreamBuilder<List<RoomSummary>>(
+                  // A fresh Stream instance every build (nothing here is
+                  // cached), so a bare setState is enough on its own to
+                  // make StreamBuilder detect the changed stream identity
+                  // and resubscribe.
+                  stream: RoomService().watchMyRooms(user.uid),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Couldn't load your rooms.",
+                            style: textTheme.bodyMedium,
+                          ),
+                          TextButton(
+                            onPressed: () => setState(() {}),
+                            child: const Text('Try again'),
+                          ),
+                        ],
+                      );
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(
+                            vertical: AppSpacing.xl,
+                          ),
+                          child: CircularProgressIndicator(color: AppColors.ink),
+                        ),
+                      );
+                    }
+                    final rooms = snapshot.data!;
+                    if (rooms.isEmpty) {
+                      return Text(
+                        'No rooms yet — start one below.',
+                        style: textTheme.bodyMedium,
+                      );
+                    }
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (final room in rooms) ...[
+                          _RoomCard(
+                            room: room,
+                            // Only the owner's view of a room is built so
+                            // far (the invite/waiting screen) — tapping a
+                            // room joined by code stays inert until a
+                            // non-owner view exists.
+                            onTap: room.isOwner
+                                ? () => context.push(
+                                    '${AppRoutes.rooms}/${room.id}',
+                                  )
+                                : () {},
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                        ],
+                      ],
+                    );
+                  },
+                ),
+              const SizedBox(height: AppSpacing.sm),
+              _DashedBorderButton(
+                label: 'New room or join code',
+                onTap: () => JoinRoomSheet.show(context),
+              ),
             ],
           ),
         ),
@@ -132,24 +141,24 @@ class HomeScreen extends StatelessWidget {
 class _RoomCard extends StatelessWidget {
   const _RoomCard({required this.room, required this.onTap});
 
-  final _RoomSummary room;
+  final RoomSummary room;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tokens = theme.extension<AppTokens>()!;
-    final isNeedsYou = room.status == _RoomStatus.needsYou;
-    final isPaused = room.status == _RoomStatus.paused;
+    final isNeedsYou = room.status == RoomStatus.needsYou;
+    final isPaused = room.status == RoomStatus.paused;
 
     // §4 "Shadow is a call to action": only the room that needs you gets
     // the shadow. §5: settled rooms flatten — a paused room recedes all
     // the way to the screen's own background; a waiting room stays a
     // step above it on cream.
     final background = switch (room.status) {
-      _RoomStatus.needsYou => AppColors.white,
-      _RoomStatus.waiting => AppColors.cream,
-      _RoomStatus.paused => theme.colorScheme.primary,
+      RoomStatus.needsYou => AppColors.white,
+      RoomStatus.waiting => AppColors.cream,
+      RoomStatus.paused => theme.colorScheme.primary,
     };
 
     final titleColor = isPaused
@@ -180,11 +189,26 @@ class _RoomCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          room.title,
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            color: titleColor,
-                          ),
+                        Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                room.title,
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  color: titleColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (room.isOwner) ...[
+                              const SizedBox(width: AppSpacing.xs),
+                              Icon(
+                                Icons.star_rounded,
+                                size: 18,
+                                color: titleColor,
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 2),
                         Text(
@@ -356,17 +380,13 @@ class _DashedRRectPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = _strokeWidth;
 
-    for (final metric in (Path()..addRRect(rrect)).computeMetrics()) {
-      var distance = 0.0;
-      while (distance < metric.length) {
-        final next = distance + _dashWidth;
-        canvas.drawPath(
-          metric.extractPath(distance, next.clamp(0, metric.length)),
-          paint,
-        );
-        distance = next + _gapWidth;
-      }
-    }
+    paintDashedPath(
+      canvas,
+      Path()..addRRect(rrect),
+      paint,
+      dashWidth: _dashWidth,
+      gapWidth: _gapWidth,
+    );
   }
 
   @override

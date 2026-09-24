@@ -4,12 +4,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
+import '../screens/create_room_screen.dart';
 import '../screens/email_login_screen.dart';
 import '../screens/forgot_password_screen.dart';
 import '../screens/game_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
+import '../screens/room_created_screen.dart';
+import '../screens/room_screen.dart';
 import '../services/auth_service.dart';
 
 class AppRoutes {
@@ -22,6 +25,12 @@ class AppRoutes {
   static const register = '/register';
   static const forgotPassword = '/forgot-password';
   static const home = '/home';
+  static const createRoom = '/create-room';
+  static const roomCreated = '/create-room/success';
+
+  /// `/rooms/:roomId` — build with `'$rooms/$roomId'`.
+  static const rooms = '/rooms';
+  static const roomDetail = '/rooms/:roomId';
   static const game = '/game';
 }
 
@@ -75,6 +84,20 @@ GoRouter buildAppRouter(AuthService authService) {
       GoRoute(
         path: AppRoutes.home,
         builder: (context, state) => const HomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.createRoom,
+        builder: (context, state) => const CreateRoomScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.roomCreated,
+        builder: (context, state) =>
+            RoomCreatedScreen(args: state.extra! as RoomCreatedArgs),
+      ),
+      GoRoute(
+        path: AppRoutes.roomDetail,
+        builder: (context, state) =>
+            RoomScreen(roomId: state.pathParameters['roomId']!),
       ),
       GoRoute(
         path: AppRoutes.game,
