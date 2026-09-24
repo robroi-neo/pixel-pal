@@ -153,8 +153,9 @@ class RoomCreatedScreen extends StatelessWidget {
                       const SizedBox(height: AppSpacing.sm),
                       Center(
                         child: TextButton(
-                          onPressed: () =>
-                              context.go('${AppRoutes.rooms}/${args.roomId}'),
+                          onPressed: () => context.pushReplacement(
+                            '${AppRoutes.rooms}/${args.roomId}',
+                          ),
                           child: const Text('Go to the room'),
                         ),
                       ),
