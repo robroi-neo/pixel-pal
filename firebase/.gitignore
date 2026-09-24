@@ -69,5 +69,10 @@ node_modules/
 # dotenv environment variables file
 .env
 
+# Service account keys (seed-rooms.js docs saving one outside the repo,
+# but ignore common names too in case one ends up here anyway).
+serviceAccountKey.json
+*-firebase-adminsdk-*.json
+
 # dataconnect generated files
 .dataconnect

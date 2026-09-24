@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/room_detail.dart';
+import '../models/room_lookup.dart';
 import '../models/room_summary.dart';
 import '../utils/initials.dart';
 
@@ -130,6 +131,7 @@ class RoomService {
             'canvasSize': canvasSize,
             'roundLengthHours': roundLengthHours,
             'ownerUid': user.uid,
+            'ownerDisplayName': displayName,
             'memberCount': 1,
             'memberUids': [user.uid],
             'memberPreview': [initialsFor(displayName)],
@@ -155,6 +157,60 @@ class RoomService {
     }
 
     throw RoomServiceException("Couldn't create the room — try again.");
+  }
+
+  /// Read-only — resolves a code to a room and reports whether joining is
+  /// actually possible, without joining yet. [joinRoom] re-checks
+  /// everything fresh in its own transaction when the user confirms, so a
+  /// stale preview (e.g. the room filled up in between) can't cause a bad
+  /// write — it just fails there and the caller re-previews.
+  Future<RoomLookupResult> previewRoomByCode(String rawCode) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw RoomServiceException('Sign in to join a room.');
+    }
+
+    final code = rawCode.trim().toUpperCase();
+    if (code.length != _inviteCodeLength) {
+      throw RoomServiceException('Enter the full 6-character code.');
+    }
+
+    try {
+      final codeSnap = await _firestore.collection('roomCodes').doc(code).get();
+      if (!codeSnap.exists) {
+        return const RoomLookupNotFound();
+      }
+
+      final roomId = codeSnap.data()!['roomId'] as String;
+      final roomSnap = await _firestore.collection('rooms').doc(roomId).get();
+      if (!roomSnap.exists) {
+        return const RoomLookupNotFound();
+      }
+
+      final data = roomSnap.data()!;
+      final memberUids = List<String>.from(data['memberUids'] as List? ?? const []);
+      final preview = RoomPreview(
+        roomId: roomId,
+        name: (data['name'] as String?) ?? 'Untitled room',
+        ownerDisplayName: (data['ownerDisplayName'] as String?) ?? 'someone',
+        memberCount: (data['memberCount'] as num?)?.toInt() ?? 1,
+        memberPreview: List<String>.from(
+          data['memberPreview'] as List? ?? const [],
+        ),
+        canvasSize: (data['canvasSize'] as num?)?.toInt() ?? 32,
+        roundLengthHours: (data['roundLengthHours'] as num?)?.toInt() ?? 24,
+      );
+
+      if (memberUids.contains(user.uid)) {
+        return RoomLookupAlreadyMember(preview);
+      }
+      if (memberUids.length >= _maxMembers) {
+        return RoomLookupFull(preview);
+      }
+      return RoomLookupJoinable(preview);
+    } on FirebaseException {
+      throw RoomServiceException("Couldn't look up that code — try again.");
+    }
   }
 
   Future<JoinedRoom> joinRoom(String rawCode) async {

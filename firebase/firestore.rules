@@ -62,9 +62,12 @@ service cloud.firestore {
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly([
               'name', 'code', 'canvasSize', 'roundLengthHours', 'ownerUid',
-              'memberCount', 'memberUids', 'memberPreview', 'createdAt',
+              'ownerDisplayName', 'memberCount', 'memberUids',
+              'memberPreview', 'createdAt',
             ])
         && request.resource.data.ownerUid == request.auth.uid
+        && request.resource.data.ownerDisplayName is string
+        && request.resource.data.ownerDisplayName.size() > 0
         && request.resource.data.memberUids == [request.auth.uid]
         && request.resource.data.memberCount == 1
         && request.resource.data.memberPreview is list
@@ -92,6 +95,8 @@ service cloud.firestore {
         && request.resource.data.name == resource.data.name
         && request.resource.data.code == resource.data.code
         && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.ownerDisplayName ==
+            resource.data.ownerDisplayName
         && request.resource.data.canvasSize == resource.data.canvasSize
         && request.resource.data.roundLengthHours ==
             resource.data.roundLengthHours
