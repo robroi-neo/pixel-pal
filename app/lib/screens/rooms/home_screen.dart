@@ -120,6 +120,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ? '${AppRoutes.rooms}/${room.id}'
                                   : '${AppRoutes.rooms}/${room.id}/round',
                             ),
+                            // Long-press, like sign-out on the avatar —
+                            // Design.md's card has no slot for a menu.
+                            onLongPress: () => _confirmRemove(room),
                           ),
                           const SizedBox(height: AppSpacing.md),
                         ],
@@ -138,13 +141,59 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  /// Owner deletes the room for everyone; a member just leaves it.
+  Future<void> _confirmRemove(RoomSummary room) async {
+    final isOwner = room.isOwner;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(isOwner ? 'Delete this room?' : 'Leave this room?'),
+        content: Text(
+          isOwner
+              ? '"${room.title}" will be removed for everyone in it. '
+                    "This can't be undone."
+              : "You'll need the invite code to rejoin \"${room.title}\".",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(isOwner ? 'Delete' : 'Leave'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      if (isOwner) {
+        await RoomService().deleteRoom(roomId: room.id, code: room.code);
+      } else {
+        await RoomService().leaveRoom(room.id);
+      }
+    } on RoomServiceException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
 }
 
 class _RoomCard extends StatelessWidget {
-  const _RoomCard({required this.room, required this.onTap});
+  const _RoomCard({
+    required this.room,
+    required this.onTap,
+    required this.onLongPress,
+  });
 
   final RoomSummary room;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -172,6 +221,7 @@ class _RoomCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         borderRadius: AppRadius.cardRadius,
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.lg),

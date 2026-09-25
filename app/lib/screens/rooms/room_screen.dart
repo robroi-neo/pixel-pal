@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -39,11 +40,17 @@ class RoomScreen extends StatelessWidget {
             ),
             title: Text(room?.name ?? '', style: textTheme.titleMedium),
             actions: [
-              IconButton(
-                // Room settings / leave room aren't built yet.
-                icon: const Icon(Icons.more_horiz),
-                onPressed: () {},
-              ),
+              if (room != null &&
+                  room.isOwnedBy(FirebaseAuth.instance.currentUser?.uid ?? ''))
+                PopupMenuButton<void>(
+                  icon: const Icon(Icons.more_horiz),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      onTap: () => _confirmDelete(context, room),
+                      child: const Text('Delete room'),
+                    ),
+                  ],
+                ),
             ],
           ),
           body: SafeArea(
@@ -77,6 +84,40 @@ class RoomScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  Future<void> _confirmDelete(BuildContext context, RoomDetail room) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this room?'),
+        content: Text(
+          '"${room.name}" will be removed for everyone in it. '
+          "This can't be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await RoomService().deleteRoom(roomId: room.id, code: room.code);
+      if (context.mounted) context.pop();
+    } on RoomServiceException catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
   }
 }
 

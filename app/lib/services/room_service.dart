@@ -94,6 +94,53 @@ class RoomService {
         .map((snapshot) => snapshot.exists ? RoomDetail.fromDoc(snapshot) : null);
   }
 
+  /// Owner-only. Subcollections (members, drawings, guesses) are left
+  /// orphaned — Spark has no Cloud Function to cascade the delete, and the
+  /// owner can't read other members' guesses to remove them. They become
+  /// unreachable once the room doc is gone, since their rules check it.
+  Future<void> deleteRoom({required String roomId, required String code}) async {
+    try {
+      await (_firestore.batch()
+            ..delete(_firestore.collection('rooms').doc(roomId))
+            ..delete(_firestore.collection('roomCodes').doc(code)))
+          .commit();
+    } on FirebaseException {
+      throw RoomServiceException("Couldn't delete the room — try again.");
+    }
+  }
+
+  /// Non-owners only (owners delete instead). The leaver's drawing and
+  /// guesses stay behind — there's no Cloud Function to clean them up, and
+  /// other members can still guess a drawing that's already submitted.
+  Future<void> leaveRoom(String roomId) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw RoomServiceException('Sign in to leave a room.');
+    }
+
+    final roomRef = _firestore.collection('rooms').doc(roomId);
+    final memberRef = roomRef.collection('members').doc(user.uid);
+
+    try {
+      await _firestore.runTransaction((tx) async {
+        final memberSnap = await tx.get(memberRef);
+        // Initials from the name used at join time, so the right preview
+        // entry is removed even if the display name changed since.
+        final displayName = displayNameOr(
+          memberSnap.data()?['displayName'] as String? ?? user.displayName,
+        );
+        tx.delete(memberRef);
+        tx.update(roomRef, {
+          'memberCount': FieldValue.increment(-1),
+          'memberUids': FieldValue.arrayRemove([user.uid]),
+          'memberPreview': FieldValue.arrayRemove([initialsFor(displayName)]),
+        });
+      });
+    } on FirebaseException {
+      throw RoomServiceException("Couldn't leave the room — try again.");
+    }
+  }
+
   Future<CreatedRoom> createRoom({
     required String name,
     required int canvasSize,

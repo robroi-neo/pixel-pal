@@ -15,6 +15,7 @@ enum RoomStatus { needsYou, waiting, paused }
 class RoomSummary {
   const RoomSummary({
     required this.id,
+    required this.code,
     required this.title,
     required this.subtitle,
     required this.status,
@@ -26,6 +27,9 @@ class RoomSummary {
   });
 
   final String id;
+
+  /// Invite code — needed to delete the room's `roomCodes` entry with it.
+  final String code;
   final String title;
   final String subtitle;
   final RoomStatus status;
@@ -60,6 +64,7 @@ class RoomSummary {
 
     return RoomSummary(
       id: doc.id,
+      code: (data['code'] as String?) ?? '',
       title: (data['name'] as String?) ?? 'Untitled room',
       subtitle:
           'Round 1 · $memberCount player${memberCount == 1 ? '' : 's'}',

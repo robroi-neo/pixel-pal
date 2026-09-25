@@ -50,7 +50,13 @@ service cloud.firestore {
         && request.resource.data.roomId is string
         && request.resource.data.roomId.size() > 0
         && request.resource.data.createdAt == request.time;
-      allow update, delete: if false;
+      allow update: if false;
+
+      // Deleted in the same batch as its room (RoomService.deleteRoom);
+      // `get()` sees the pre-batch room, so ownership is still checkable.
+      allow delete: if request.auth != null
+        && get(/databases/$(database)/documents/rooms/$(resource.data.roomId))
+            .data.ownerUid == request.auth.uid;
     }
 
     // Was "all writes go through createRoom/joinRoom callables"
@@ -120,7 +126,23 @@ service cloud.firestore {
         && request.resource.data.roundEndsAt == resource.data.roundEndsAt
         && request.resource.data.createdAt == resource.data.createdAt;
 
-      allow delete: if false;
+      // Leaving (RoomService.leaveRoom): a non-owner member removes only
+      // themselves. memberPreview may lose at most one entry — theirs.
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.memberUids
+        && request.auth.uid != resource.data.ownerUid
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['memberUids', 'memberCount', 'memberPreview'])
+        && request.resource.data.memberUids ==
+            resource.data.memberUids.removeAll([request.auth.uid])
+        && request.resource.data.memberCount == resource.data.memberCount - 1
+        && request.resource.data.memberPreview.size() >=
+            resource.data.memberPreview.size() - 1
+        && request.resource.data.memberPreview.size() <=
+            resource.data.memberPreview.size();
+
+      allow delete: if request.auth != null
+        && resource.data.ownerUid == request.auth.uid;
 
       // A member can read their own doc — needed for prompt pick to know
       // what it already issued them (see below). Still not queried by
@@ -153,7 +175,11 @@ service cloud.firestore {
           && request.resource.data.issuedPromptIds is list
           && request.resource.data.issuedPromptIds.size() == 3;
 
-        allow delete: if false;
+        // Leaving — only your own doc, and never the owner's.
+        allow delete: if request.auth != null
+          && request.auth.uid == uid
+          && get(/databases/$(database)/documents/rooms/$(roomId))
+              .data.ownerUid != uid;
 
         // My own attempts at guessing one specific other member's
         // drawing (authorUid) — doc ID is who I'm guessing, not who's

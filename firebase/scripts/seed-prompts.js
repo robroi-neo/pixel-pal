@@ -52,21 +52,42 @@ function parseArgs() {
   );
 }
 
+// Updates already-seeded words in place rather than adding duplicates, so
+// prompt IDs already saved in members' issuedPromptIds stay valid.
 async function seed(db) {
   console.log(`Seeding ${WORDS.length} prompts...\n`);
 
+  const existing = await db
+      .collection("prompts")
+      .where("seedTag", "==", SEED_TAG)
+      .get();
+  const refsByWord = new Map();
+  for (const doc of existing.docs) {
+    const word = doc.get("word");
+    if (!refsByWord.has(word)) refsByWord.set(word, []);
+    refsByWord.get(word).push(doc.ref);
+  }
+
   const batch = db.batch();
   for (const [word, category, difficulty] of WORDS) {
-    const ref = db.collection("prompts").doc();
-    batch.set(ref, {
+    const fields = {
       word,
       category,
       difficulty,
       multiplier: MULTIPLIER_BY_DIFFICULTY[difficulty],
       seedTag: SEED_TAG,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    console.log(`  ${word.padEnd(12)} ${category.padEnd(12)} ${difficulty.padEnd(8)} x${MULTIPLIER_BY_DIFFICULTY[difficulty]}`);
+    };
+    const refs = refsByWord.get(word);
+    if (refs) {
+      for (const ref of refs) batch.set(ref, fields, {merge: true});
+    } else {
+      batch.set(db.collection("prompts").doc(), {
+        ...fields,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    const action = refs ? "updated" : "created";
+    console.log(`  ${word.padEnd(12)} ${category.padEnd(12)} ${difficulty.padEnd(8)} x${MULTIPLIER_BY_DIFFICULTY[difficulty]}  (${action})`);
   }
   await batch.commit();
 
