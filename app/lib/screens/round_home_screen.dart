@@ -97,6 +97,8 @@ class _RoundHomeBody extends StatelessWidget {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
     final tokens = theme.extension<AppTokens>()!;
+    // You guess everyone else's drawing, not your own.
+    final othersToGuess = (room.memberCount - 1).clamp(0, room.memberCount);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -158,7 +160,7 @@ class _RoundHomeBody extends StatelessWidget {
                       child: Text('Guessing', style: textTheme.titleMedium),
                     ),
                     Text(
-                      '0 of 4 done',
+                      '0 of $othersToGuess done',
                       style: textTheme.bodySmall?.copyWith(
                         color: AppColors.ink.withValues(alpha: 0.6),
                       ),
@@ -166,7 +168,7 @@ class _RoundHomeBody extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                const _SegmentedProgress(total: 4, done: 0),
+                _SegmentedProgress(total: othersToGuess, done: 0),
               ],
             ),
           ),
