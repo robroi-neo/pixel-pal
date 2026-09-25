@@ -120,11 +120,17 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
   // resubscribes, which would otherwise reset this card to its loading
   // state on every minute-tick from _ticker below.
   late final Stream<List<String>?> _issuedPromptIds = RoomService()
-      .watchIssuedPromptIds(widget.room.id, FirebaseAuth.instance.currentUser!.uid);
+      .watchIssuedPromptIds(
+        widget.room.id,
+        FirebaseAuth.instance.currentUser!.uid,
+      );
   late final Stream<List<DrawingSubmission>> _othersDrawings = DrawingService()
       .watchOthersDrawings(widget.room.id);
   late final Stream<Map<String, GuessProgress>> _myGuesses = GuessService()
       .watchMyGuesses(widget.room.id);
+  late final Stream<bool> _hasSubmitted = DrawingService().watchHasSubmitted(
+    widget.room.id,
+  );
 
   @override
   void initState() {
@@ -150,88 +156,37 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
     final textTheme = theme.textTheme;
     final tokens = theme.extension<AppTokens>()!;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.lg),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Round 1', style: textTheme.headlineMedium),
-          const SizedBox(height: AppSpacing.sm),
-          _RoundDeadlineRow(roundEndsAt: room.roundEndsAt),
-          const SizedBox(height: AppSpacing.lg),
+    return StreamBuilder<bool>(
+      stream: _hasSubmitted,
+      builder: (context, submittedSnapshot) {
+        final submitted = submittedSnapshot.data ?? false;
+        return SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text('Round 1', style: textTheme.headlineMedium),
+              const SizedBox(height: AppSpacing.sm),
+              _RoundDeadlineRow(roundEndsAt: room.roundEndsAt),
+              const SizedBox(height: AppSpacing.lg),
 
-          // §4 "Shadow is a call to action": the task still ahead of you
-          // gets the shadow. Drawing is the one "Pick your prompt" leads
-          // to, so it's the white, shadowed card; guessing stays flat
-          // cream until there's something real to act on.
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: AppRadius.cardRadius,
-              border: Border.all(color: AppColors.ink, width: AppBorders.thick),
-              boxShadow: tokens.hardShadow,
-            ),
-            child: StreamBuilder<List<String>?>(
-              stream: _issuedPromptIds,
-              builder: (context, snapshot) {
-                final hasPrompt = snapshot.data?.isNotEmpty ?? false;
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            'Your drawing',
-                            style: textTheme.titleMedium,
-                          ),
-                        ),
-                        hasPrompt
-                            ? NeutralChip('prompt picked')
-                            : AttentionChip('not started'),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      hasPrompt
-                          ? 'Prompt locked in. ${room.canvasSize} × '
-                                '${room.canvasSize} canvas this round.'
-                          : 'Your prompt is waiting. ${room.canvasSize} × '
-                                '${room.canvasSize} canvas this round.',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.ink.withValues(alpha: 0.7),
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Container(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            decoration: BoxDecoration(
-              color: AppColors.cream,
-              borderRadius: AppRadius.cardRadius,
-              border: Border.all(color: AppColors.ink, width: AppBorders.thick),
-            ),
-            // Both real now: total is drawings actually submitted so far
-            // in this room (not memberCount-1 — you can't guess a
-            // drawing nobody's made yet), done is how many this member
-            // has solved, via GuessService's own attempt-tracking.
-            child: StreamBuilder<List<DrawingSubmission>>(
-              stream: _othersDrawings,
-              builder: (context, drawingsSnapshot) {
-                final drawings = drawingsSnapshot.data ?? const [];
-                return StreamBuilder<Map<String, GuessProgress>>(
-                  stream: _myGuesses,
-                  builder: (context, guessesSnapshot) {
-                    final guesses = guessesSnapshot.data ?? const {};
-                    final total = drawings.length;
-                    final done = drawings
-                        .where((d) => guesses[d.authorUid]?.solved ?? false)
-                        .length;
+              // §4 "Shadow is a call to action": the task still ahead of you
+              // gets the shadow — drawing until it's submitted, then guessing.
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: submitted ? AppColors.cream : AppColors.white,
+                  borderRadius: AppRadius.cardRadius,
+                  border: Border.all(
+                    color: AppColors.ink,
+                    width: AppBorders.thick,
+                  ),
+                  boxShadow: submitted ? null : tokens.hardShadow,
+                ),
+                child: StreamBuilder<List<String>?>(
+                  stream: _issuedPromptIds,
+                  builder: (context, snapshot) {
+                    final hasPrompt = snapshot.data?.isNotEmpty ?? false;
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -239,51 +194,131 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
                           children: [
                             Expanded(
                               child: Text(
-                                'Guessing',
+                                'Your drawing',
                                 style: textTheme.titleMedium,
                               ),
                             ),
-                            Text(
-                              '$done of $total done',
-                              style: textTheme.bodySmall?.copyWith(
-                                color: AppColors.ink.withValues(alpha: 0.6),
-                              ),
-                            ),
+                            submitted
+                                ? NeutralChip('submitted')
+                                : hasPrompt
+                                ? NeutralChip('prompt picked')
+                                : AttentionChip('not started'),
                           ],
                         ),
-                        const SizedBox(height: AppSpacing.sm),
-                        _SegmentedProgress(total: total, done: done),
+                        const SizedBox(height: 4),
+                        Text(
+                          submitted
+                              ? 'Submitted. Now see what everyone else drew.'
+                              : hasPrompt
+                              ? 'Prompt locked in. ${room.canvasSize} × '
+                                    '${room.canvasSize} canvas this round.'
+                              : 'Your prompt is waiting. ${room.canvasSize} × '
+                                    '${room.canvasSize} canvas this round.',
+                          style: textTheme.bodySmall?.copyWith(
+                            color: AppColors.ink.withValues(alpha: 0.7),
+                          ),
+                        ),
                       ],
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.md),
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.lg),
+                decoration: BoxDecoration(
+                  color: submitted ? AppColors.white : AppColors.cream,
+                  borderRadius: AppRadius.cardRadius,
+                  border: Border.all(
+                    color: AppColors.ink,
+                    width: AppBorders.thick,
+                  ),
+                  boxShadow: submitted ? tokens.hardShadow : null,
+                ),
+                // Both real now: total is drawings actually submitted so far
+                // in this room (not memberCount-1 — you can't guess a
+                // drawing nobody's made yet), done is how many this member
+                // has solved, via GuessService's own attempt-tracking.
+                child: StreamBuilder<List<DrawingSubmission>>(
+                  stream: _othersDrawings,
+                  builder: (context, drawingsSnapshot) {
+                    final drawings = drawingsSnapshot.data ?? const [];
+                    return StreamBuilder<Map<String, GuessProgress>>(
+                      stream: _myGuesses,
+                      builder: (context, guessesSnapshot) {
+                        final guesses = guessesSnapshot.data ?? const {};
+                        final total = drawings.length;
+                        final done = drawings
+                            .where((d) => guesses[d.authorUid]?.solved ?? false)
+                            .length;
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    'Guessing',
+                                    style: textTheme.titleMedium,
+                                  ),
+                                ),
+                                Text(
+                                  '$done of $total done',
+                                  style: textTheme.bodySmall?.copyWith(
+                                    color: AppColors.ink.withValues(alpha: 0.6),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: AppSpacing.sm),
+                            _SegmentedProgress(total: total, done: done),
+                          ],
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              // Design.md §5: one primary button. Once the drawing's in,
+              // guessing is the only task left, so it takes that slot.
+              if (submitted) ...[
+                AppButton(
+                  label: 'Guess drawings',
+                  enabled: !room.isRoundLocked,
+                  onPressed: () async =>
+                      context.push('${AppRoutes.rooms}/${room.id}/guess'),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ] else ...[
+                AppButton(
+                  label: 'Pick your prompt',
+                  enabled: !room.isRoundLocked,
+                  onPressed: () async =>
+                      context.push('${AppRoutes.rooms}/${room.id}/prompt-pick'),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Center(
+                  child: TextButton(
+                    onPressed: room.isRoundLocked
+                        ? null
+                        : () => context.push(
+                            '${AppRoutes.rooms}/${room.id}/guess',
+                          ),
+                    child: const Text('Carry on guessing'),
+                  ),
+                ),
+              ],
+              Center(
+                child: TextButton(
+                  onPressed: () {},
+                  child: const Text('Leaderboard'),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppSpacing.xl),
-          AppButton(
-            label: 'Pick your prompt',
-            enabled: !room.isRoundLocked,
-            onPressed: () async =>
-                context.push('${AppRoutes.rooms}/${room.id}/prompt-pick'),
-          ),
-          const SizedBox(height: AppSpacing.md),
-          Center(
-            child: TextButton(
-              onPressed: room.isRoundLocked
-                  ? null
-                  : () => context.push('${AppRoutes.rooms}/${room.id}/guess'),
-              child: const Text('Carry on guessing'),
-            ),
-          ),
-          Center(
-            child: TextButton(
-              onPressed: () {},
-              child: const Text('Leaderboard'),
-            ),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
@@ -361,7 +396,10 @@ class _SegmentedProgress extends StatelessWidget {
               decoration: BoxDecoration(
                 color: i < done ? AppColors.ink : AppColors.white,
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: AppColors.ink, width: AppBorders.thin),
+                border: Border.all(
+                  color: AppColors.ink,
+                  width: AppBorders.thin,
+                ),
               ),
             ),
           ),

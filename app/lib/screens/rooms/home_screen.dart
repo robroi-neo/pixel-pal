@@ -113,9 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             onTap: () => context.push(
                               '${AppRoutes.rooms}/${room.id}/round',
                             ),
-                            // Long-press, like sign-out on the avatar —
-                            // Design.md's card has no slot for a menu.
-                            onLongPress: () => _confirmRemove(room),
+                            onRemove: () => _confirmRemove(room),
                           ),
                           const SizedBox(height: AppSpacing.md),
                         ],
@@ -181,12 +179,14 @@ class _RoomCard extends StatelessWidget {
   const _RoomCard({
     required this.room,
     required this.onTap,
-    required this.onLongPress,
+    required this.onRemove,
   });
 
   final RoomSummary room;
   final VoidCallback onTap;
-  final VoidCallback onLongPress;
+
+  /// Delete (owner) or leave (member) — the card's icon picks which.
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -214,7 +214,6 @@ class _RoomCard extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        onLongPress: onLongPress,
         borderRadius: AppRadius.cardRadius,
         child: Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
@@ -272,6 +271,23 @@ class _RoomCard extends StatelessWidget {
                     isNeedsYou
                         ? AttentionChip(room.timeLabel!)
                         : NeutralChip(room.timeLabel!),
+                  IconButton(
+                    onPressed: onRemove,
+                    tooltip: room.isOwner ? 'Delete room' : 'Leave room',
+                    icon: Icon(
+                      room.isOwner
+                          ? Icons.delete_outline
+                          : Icons.logout_rounded,
+                      size: 20,
+                      color: titleColor,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
                 ],
               ),
               if (!isPaused) ...[

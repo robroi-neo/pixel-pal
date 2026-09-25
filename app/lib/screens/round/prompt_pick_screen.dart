@@ -135,10 +135,17 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
                       final selected = prompts.firstWhere(
                         (p) => p.id == _selectedId,
                       );
-                      context.push(
+                      final submitted = await context.push<bool>(
                         '${AppRoutes.rooms}/${widget.roomId}/draw',
                         extra: selected,
                       );
+                      // Replace (not push) so Back from guessing returns
+                      // to the hub rather than to this prompt list.
+                      if (submitted == true && context.mounted) {
+                        context.pushReplacement(
+                          '${AppRoutes.rooms}/${widget.roomId}/guess',
+                        );
+                      }
                     },
                   ),
                   const SizedBox(height: AppSpacing.sm),

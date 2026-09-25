@@ -128,7 +128,8 @@ class _DrawingScreenState extends State<DrawingScreen> {
         pixels: _pixels,
       );
       if (!mounted) return;
-      context.pop();
+      // true = submitted; PromptPickScreen moves on to guessing.
+      context.pop(true);
     } on DrawingServiceException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(
