@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../router/app_router.dart';
-import '../services/auth_service.dart';
-import '../theme/app_dimens.dart';
-import '../widgets/app_button.dart';
-import '../widgets/auth_error_banner.dart';
-import '../widgets/pixel_mark.dart';
+import '../../router/app_router.dart';
+import '../../services/auth_service.dart';
+import '../../theme/app_dimens.dart';
+import '../../widgets/app_button.dart';
+import '../../widgets/auth_error_banner.dart';
+import '../../widgets/pixel_mark.dart';
 
 /// Design.md §5 "Sign in": pixel-art mark, wordmark, Google primary /
 /// email secondary. The only pixel art outside a canvas frame is the app

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../router/app_router.dart';
-import '../services/room_service.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../widgets/app_button.dart';
+import '../../router/app_router.dart';
+import '../../services/room_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../widgets/app_button.dart';
 import 'room_created_screen.dart';
 
 enum _CanvasSize {

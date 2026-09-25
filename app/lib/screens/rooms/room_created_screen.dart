@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../router/app_router.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../utils/clipboard.dart';
-import '../widgets/app_button.dart';
+import '../../router/app_router.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../utils/clipboard.dart';
+import '../../widgets/app_button.dart';
 
 class RoomCreatedArgs {
   const RoomCreatedArgs({

@@ -5,18 +5,17 @@ import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/prompt.dart';
-import '../screens/create_room_screen.dart';
-import '../screens/drawing_screen.dart';
-import '../screens/email_login_screen.dart';
-import '../screens/forgot_password_screen.dart';
-import '../screens/game_screen.dart';
-import '../screens/home_screen.dart';
-import '../screens/login_screen.dart';
-import '../screens/register_screen.dart';
-import '../screens/prompt_pick_screen.dart';
-import '../screens/room_created_screen.dart';
-import '../screens/room_screen.dart';
-import '../screens/round_home_screen.dart';
+import '../screens/auth/email_login_screen.dart';
+import '../screens/auth/forgot_password_screen.dart';
+import '../screens/auth/login_screen.dart';
+import '../screens/auth/register_screen.dart';
+import '../screens/rooms/create_room_screen.dart';
+import '../screens/rooms/home_screen.dart';
+import '../screens/rooms/room_created_screen.dart';
+import '../screens/rooms/room_screen.dart';
+import '../screens/round/drawing_screen.dart';
+import '../screens/round/prompt_pick_screen.dart';
+import '../screens/round/round_home_screen.dart';
 import '../services/auth_service.dart';
 
 class AppRoutes {
@@ -53,7 +52,6 @@ class AppRoutes {
   /// [Prompt] travels via `extra` (it's not URL-safe data, and there's no
   /// server-side "current prompt" to look up instead).
   static const draw = '/rooms/:roomId/draw';
-  static const game = '/game';
 }
 
 /// Dev-only escape hatch: when true, the auth gate below treats every user
@@ -137,10 +135,6 @@ GoRouter buildAppRouter(AuthService authService) {
           roomId: state.pathParameters['roomId']!,
           prompt: state.extra! as Prompt,
         ),
-      ),
-      GoRoute(
-        path: AppRoutes.game,
-        builder: (context, state) => const GameScreen(),
       ),
     ],
   );

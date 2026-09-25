@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../router/app_router.dart';
-import '../services/auth_service.dart';
-import '../theme/app_dimens.dart';
-import '../theme/app_tokens.dart';
-import '../widgets/app_button.dart';
-import '../widgets/auth_error_banner.dart';
+import '../../router/app_router.dart';
+import '../../services/auth_service.dart';
+import '../../theme/app_dimens.dart';
+import '../../theme/app_tokens.dart';
+import '../../widgets/app_button.dart';
+import '../../widgets/auth_error_banner.dart';
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});

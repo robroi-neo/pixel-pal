@@ -4,14 +4,18 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../models/room_detail.dart';
-import '../router/app_router.dart';
-import '../services/room_service.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../theme/app_tokens.dart';
-import '../widgets/app_button.dart';
-import '../widgets/app_chip.dart';
+import '../../models/drawing_submission.dart';
+import '../../models/guess_progress.dart';
+import '../../models/room_detail.dart';
+import '../../router/app_router.dart';
+import '../../services/drawing_service.dart';
+import '../../services/guess_service.dart';
+import '../../services/room_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../theme/app_tokens.dart';
+import '../../widgets/app_button.dart';
+import '../../widgets/app_chip.dart';
 
 /// Design.md §5 "Round home (hub)": one primary button, the other routes
 /// are text links; two task cards (drawing, guessing) with the unstarted
@@ -23,12 +27,13 @@ import '../widgets/app_chip.dart';
 /// work, not done here.
 ///
 /// The round engine doesn't exist yet (Implementations.md Phase 3), so
-/// "Round 1" and the guess-progress numerator are placeholders — but room
-/// name, canvas size, the round deadline (`RoomDetail.roundEndsAt`), and
-/// the drawing-status chip (`RoomDetail`'s member doc `issuedPromptIds`)
-/// are real, live data. "Pick your prompt" opens [PromptPickScreen] and
-/// disables once the round's locked; "Carry on guessing" and
-/// "Leaderboard" are still deliberate no-ops.
+/// "Round 1" is a placeholder — but room name, canvas size, the round
+/// deadline (`RoomDetail.roundEndsAt`), the drawing-status chip, and the
+/// guessing card's own N-of-N (real submitted drawings vs. this member's
+/// real solved count) are all real, live data now. "Pick your prompt"
+/// opens [PromptPickScreen] and "Carry on guessing" opens [GuessScreen],
+/// both disabling once the round's locked; "Leaderboard" is still a
+/// deliberate no-op — there's no scoring system to show yet.
 class RoundHomeScreen extends StatelessWidget {
   const RoundHomeScreen({super.key, required this.roomId});
 
@@ -110,6 +115,10 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
   // state on every minute-tick from _ticker below.
   late final Stream<List<String>?> _issuedPromptIds = RoomService()
       .watchIssuedPromptIds(widget.room.id, FirebaseAuth.instance.currentUser!.uid);
+  late final Stream<List<DrawingSubmission>> _othersDrawings = DrawingService()
+      .watchOthersDrawings(widget.room.id);
+  late final Stream<Map<String, GuessProgress>> _myGuesses = GuessService()
+      .watchMyGuesses(widget.room.id);
 
   @override
   void initState() {
@@ -134,8 +143,6 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
     final tokens = theme.extension<AppTokens>()!;
-    // You guess everyone else's drawing, not your own.
-    final othersToGuess = (room.memberCount - 1).clamp(0, room.memberCount);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -203,25 +210,48 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
               borderRadius: AppRadius.cardRadius,
               border: Border.all(color: AppColors.ink, width: AppBorders.thick),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('Guessing', style: textTheme.titleMedium),
-                    ),
-                    Text(
-                      '0 of $othersToGuess done',
-                      style: textTheme.bodySmall?.copyWith(
-                        color: AppColors.ink.withValues(alpha: 0.6),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                _SegmentedProgress(total: othersToGuess, done: 0),
-              ],
+            // Both real now: total is drawings actually submitted so far
+            // in this room (not memberCount-1 — you can't guess a
+            // drawing nobody's made yet), done is how many this member
+            // has solved, via GuessService's own attempt-tracking.
+            child: StreamBuilder<List<DrawingSubmission>>(
+              stream: _othersDrawings,
+              builder: (context, drawingsSnapshot) {
+                final drawings = drawingsSnapshot.data ?? const [];
+                return StreamBuilder<Map<String, GuessProgress>>(
+                  stream: _myGuesses,
+                  builder: (context, guessesSnapshot) {
+                    final guesses = guessesSnapshot.data ?? const {};
+                    final total = drawings.length;
+                    final done = drawings
+                        .where((d) => guesses[d.authorUid]?.solved ?? false)
+                        .length;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Guessing',
+                                style: textTheme.titleMedium,
+                              ),
+                            ),
+                            Text(
+                              '$done of $total done',
+                              style: textTheme.bodySmall?.copyWith(
+                                color: AppColors.ink.withValues(alpha: 0.6),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
+                        _SegmentedProgress(total: total, done: done),
+                      ],
+                    );
+                  },
+                );
+              },
             ),
           ),
           const SizedBox(height: AppSpacing.xl),
@@ -234,7 +264,9 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
           const SizedBox(height: AppSpacing.md),
           Center(
             child: TextButton(
-              onPressed: () {},
+              onPressed: room.isRoundLocked
+                  ? null
+                  : () => context.push('${AppRoutes.rooms}/${room.id}/guess'),
               child: const Text('Carry on guessing'),
             ),
           ),

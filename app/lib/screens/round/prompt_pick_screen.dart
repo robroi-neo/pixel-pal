@@ -2,14 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../models/prompt.dart';
-import '../router/app_router.dart';
-import '../services/prompt_service.dart';
-import '../services/room_service.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../theme/app_tokens.dart';
-import '../widgets/app_button.dart';
+import '../../models/prompt.dart';
+import '../../router/app_router.dart';
+import '../../services/prompt_service.dart';
+import '../../services/room_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../theme/app_tokens.dart';
+import '../../widgets/app_button.dart';
 
 /// Design.md §5 "Prompt pick": three cards, selection state, no-reroll
 /// stated on screen.

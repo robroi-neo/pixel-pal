@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../models/room_summary.dart';
-import '../router/app_router.dart';
-import '../services/auth_service.dart';
-import '../services/room_service.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../theme/app_tokens.dart';
-import '../utils/dashed_path.dart';
-import '../utils/initials.dart';
-import '../widgets/app_avatar.dart';
-import '../widgets/app_chip.dart';
+import '../../models/room_summary.dart';
+import '../../router/app_router.dart';
+import '../../services/auth_service.dart';
+import '../../services/room_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../theme/app_tokens.dart';
+import '../../utils/dashed_path.dart';
+import '../../utils/initials.dart';
+import '../../widgets/app_avatar.dart';
+import '../../widgets/app_chip.dart';
 import 'join_room_sheet.dart';
 
 /// Reads the signed-in user's rooms live from Firestore — every room the

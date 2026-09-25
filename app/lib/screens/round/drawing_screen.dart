@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../models/prompt.dart';
-import '../models/room_detail.dart';
-import '../services/drawing_service.dart';
-import '../services/room_service.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../theme/app_palette.dart';
-import '../widgets/app_button.dart';
-import '../widgets/app_chip.dart';
-import '../widgets/pixel_canvas.dart';
+import '../../models/prompt.dart';
+import '../../models/room_detail.dart';
+import '../../services/drawing_service.dart';
+import '../../services/room_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../theme/app_palette.dart';
+import '../../widgets/app_button.dart';
+import '../../widgets/app_chip.dart';
+import '../../widgets/pixel_canvas.dart';
 
 enum _EditorTool { pencil, fill, eraser }
 

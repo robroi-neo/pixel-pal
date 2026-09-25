@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../models/room_detail.dart';
-import '../services/room_service.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../utils/clipboard.dart';
-import '../utils/dashed_path.dart';
-import '../widgets/app_avatar.dart';
-import '../widgets/app_button.dart';
+import '../../models/room_detail.dart';
+import '../../services/room_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../utils/clipboard.dart';
+import '../../utils/dashed_path.dart';
+import '../../widgets/app_avatar.dart';
+import '../../widgets/app_button.dart';
 
 /// A live per-room screen — reached by tapping a room you created on the
 /// room list. Design.md marks create/join room as not designed (§5), so

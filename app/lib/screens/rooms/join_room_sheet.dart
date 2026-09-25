@@ -4,13 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
-import '../models/room_lookup.dart';
-import '../router/app_router.dart';
-import '../services/room_service.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_dimens.dart';
-import '../widgets/app_avatar.dart';
-import '../widgets/app_button.dart';
+import '../../models/room_lookup.dart';
+import '../../router/app_router.dart';
+import '../../services/room_service.dart';
+import '../../theme/app_colors.dart';
+import '../../theme/app_dimens.dart';
+import '../../widgets/app_avatar.dart';
+import '../../widgets/app_button.dart';
 
 /// The "join a room" bottom sheet reached from the room list's "New room
 /// or join code" button. Design.md marks create/join room as not designed

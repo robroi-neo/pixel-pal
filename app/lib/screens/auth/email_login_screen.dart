@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../router/app_router.dart';
-import '../services/auth_service.dart';
-import '../theme/app_dimens.dart';
-import '../widgets/app_button.dart';
-import '../widgets/auth_error_banner.dart';
+import '../../router/app_router.dart';
+import '../../services/auth_service.dart';
+import '../../theme/app_dimens.dart';
+import '../../widgets/app_button.dart';
+import '../../widgets/auth_error_banner.dart';
 
 /// The email + password sign-in form, reached from the landing screen's
 /// "Already have an account? Log in" link (see [LoginScreen] in
