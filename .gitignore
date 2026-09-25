@@ -1,1 +1,6 @@
 .idea/
+
+# Firebase service account keys — real credentials, never commit these.
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+C:\coding_projects\asynch-pixel\expense-tracker-cbd72-firebase-adminsdk-fbsvc-919bbfc466.json
