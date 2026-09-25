@@ -40,6 +40,7 @@ const PRESETS = [
     name: "Pixel pals",
     canvasSize: 32,
     roundLengthHours: 24,
+    hoursFromNow: 18, // matches Design.md's "18h left" mockup exactly
     memberCount: 5,
     memberPreview: ["MR", "JS", "PF", "TK"],
   },
@@ -47,6 +48,7 @@ const PRESETS = [
     name: "Office doodles",
     canvasSize: 32,
     roundLengthHours: 12,
+    hoursFromNow: 2,
     memberCount: 8, // deliberately full — exercises the "8 of 8" join state
     memberPreview: ["DN", "SH", "RK", "LY"],
   },
@@ -54,6 +56,7 @@ const PRESETS = [
     name: "Sunday sketch club",
     canvasSize: 64,
     roundLengthHours: 48,
+    hoursFromNow: 40,
     memberCount: 2,
     memberPreview: ["AL"],
   },
@@ -61,6 +64,7 @@ const PRESETS = [
     name: "Late night lineart",
     canvasSize: 16,
     roundLengthHours: 12,
+    hoursFromNow: -1, // already past — exercises the "locked" state
     memberCount: 1, // just the owner — exercises the empty-room state
     memberPreview: [],
   },
@@ -68,6 +72,7 @@ const PRESETS = [
     name: "Study break doodles",
     canvasSize: 32,
     roundLengthHours: 24,
+    hoursFromNow: 6,
     memberCount: 3,
     memberPreview: ["EV", "QN"],
   },
@@ -123,6 +128,9 @@ async function seed(db, ownerUid) {
         code,
         canvasSize: preset.canvasSize,
         roundLengthHours: preset.roundLengthHours,
+        roundEndsAt: admin.firestore.Timestamp.fromDate(
+            new Date(Date.now() + preset.hoursFromNow * 3600 * 1000),
+        ),
         ownerUid,
         ownerDisplayName,
         memberCount: preset.memberCount,

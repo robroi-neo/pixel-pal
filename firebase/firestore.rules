@@ -70,8 +70,8 @@ service cloud.firestore {
 
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly([
-              'name', 'code', 'canvasSize', 'roundLengthHours', 'ownerUid',
-              'ownerDisplayName', 'memberCount', 'memberUids',
+              'name', 'code', 'canvasSize', 'roundLengthHours', 'roundEndsAt',
+              'ownerUid', 'ownerDisplayName', 'memberCount', 'memberUids',
               'memberPreview', 'createdAt',
             ])
         && request.resource.data.ownerUid == request.auth.uid
@@ -88,6 +88,14 @@ service cloud.firestore {
         && request.resource.data.code.size() == 6
         && request.resource.data.canvasSize in [16, 32, 64]
         && request.resource.data.roundLengthHours in [12, 24, 48]
+        // roundEndsAt is computed from the client's own clock (there's no
+        // Cloud Function to stamp it authoritatively — see CLAUDE.md on
+        // Spark), so this can't check it equals request.time + the exact
+        // round length; a loose bound just stops an absurd/far-future
+        // value. 49h, not 48h, gives an hour of clock-skew slack.
+        && request.resource.data.roundEndsAt is timestamp
+        && request.resource.data.roundEndsAt > request.time
+        && request.resource.data.roundEndsAt < request.time + duration.value(49, 'h')
         && request.resource.data.createdAt == request.time;
 
       allow update: if request.auth != null
@@ -109,6 +117,7 @@ service cloud.firestore {
         && request.resource.data.canvasSize == resource.data.canvasSize
         && request.resource.data.roundLengthHours ==
             resource.data.roundLengthHours
+        && request.resource.data.roundEndsAt == resource.data.roundEndsAt
         && request.resource.data.createdAt == resource.data.createdAt;
 
       allow delete: if false;

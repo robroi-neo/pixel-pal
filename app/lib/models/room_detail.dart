@@ -13,6 +13,7 @@ class RoomDetail {
     required this.memberPreview,
     required this.canvasSize,
     required this.roundLengthHours,
+    required this.roundEndsAt,
   });
 
   final String id;
@@ -24,7 +25,19 @@ class RoomDetail {
   final int canvasSize;
   final int roundLengthHours;
 
+  /// Computed client-side at creation (no Cloud Function to stamp it
+  /// authoritatively — Spark, see CLAUDE.md), and there's no round engine
+  /// to advance it (Implementations.md Phase 3), so this is really "round
+  /// 1 ends at" rather than a rolling per-round deadline. Null for rooms
+  /// created before this field existed.
+  final DateTime? roundEndsAt;
+
   bool isOwnedBy(String uid) => ownerUid == uid;
+
+  /// False (never locked) when [roundEndsAt] is unknown — an absent
+  /// deadline isn't the same as a passed one.
+  bool get isRoundLocked =>
+      roundEndsAt != null && DateTime.now().isAfter(roundEndsAt!);
 
   factory RoomDetail.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
@@ -39,6 +52,7 @@ class RoomDetail {
       ),
       canvasSize: (data['canvasSize'] as num?)?.toInt() ?? 32,
       roundLengthHours: (data['roundLengthHours'] as num?)?.toInt() ?? 24,
+      roundEndsAt: (data['roundEndsAt'] as Timestamp?)?.toDate(),
     );
   }
 }

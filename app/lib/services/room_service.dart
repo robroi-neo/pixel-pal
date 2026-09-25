@@ -130,6 +130,14 @@ class RoomService {
             'code': code,
             'canvasSize': canvasSize,
             'roundLengthHours': roundLengthHours,
+            // Computed from the client's own clock, not a Cloud Function
+            // (Spark — see CLAUDE.md), so it's only as accurate as the
+            // creator's device clock. There's no round engine to advance
+            // this later (Implementations.md Phase 3), so it's really
+            // "round 1 ends at" rather than a rolling deadline.
+            'roundEndsAt': Timestamp.fromDate(
+              DateTime.now().add(Duration(hours: roundLengthHours)),
+            ),
             'ownerUid': user.uid,
             'ownerDisplayName': displayName,
             'memberCount': 1,
@@ -273,6 +281,23 @@ class RoomService {
     } on FirebaseException {
       throw RoomServiceException("Couldn't join that room — try again.");
     }
+  }
+
+  /// Live version of [getIssuedPromptIds] — for a screen that should
+  /// update the moment prompts are issued (e.g. round home's drawing
+  /// status chip flipping right after prompt pick, without needing a
+  /// manual refresh).
+  Stream<List<String>?> watchIssuedPromptIds(String roomId, String uid) {
+    return _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('members')
+        .doc(uid)
+        .snapshots()
+        .map((snapshot) {
+          final ids = snapshot.data()?['issuedPromptIds'];
+          return ids == null ? null : List<String>.from(ids as List);
+        });
   }
 
   /// The prompt IDs already issued to this member for their current
