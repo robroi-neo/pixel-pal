@@ -16,23 +16,34 @@ class PromptService {
 
   final FirebaseFirestore _firestore;
 
-  Future<List<Prompt>> pickRandom({int count = 3}) async {
+  // Session-lifetime cache, shared by every PromptService instance — the
+  // pool only ever changes via the seeder script, never from inside a
+  // running app, so one collection read per app run covers both
+  // [pickRandom] and [getByIds]. Implementations.md's real design
+  // (300-500 prompts) would need this to be smarter (paged/queried, not
+  // held whole in memory) — revisit once the pool is actually that large.
+  static List<Prompt>? _poolCache;
+
+  Future<List<Prompt>> _pool() async {
+    final cached = _poolCache;
+    if (cached != null) return cached;
     // The pool is small for now (a handful of seeded docs), so fetching
-    // it all and sampling client-side is simplest. Implementations.md's
-    // real design (300-500 prompts) would need a smarter query — revisit
-    // once the pool is actually that large.
+    // it all and sampling/filtering client-side is simplest.
     final snapshot = await _firestore.collection('prompts').get();
-    final prompts = snapshot.docs.map(Prompt.fromDoc).toList()..shuffle(Random());
-    return prompts.take(count).toList();
+    return _poolCache = snapshot.docs.map(Prompt.fromDoc).toList();
+  }
+
+  Future<List<Prompt>> pickRandom({int count = 3}) async {
+    final shuffled = List<Prompt>.from(await _pool())..shuffle(Random());
+    return shuffled.take(count).toList();
   }
 
   /// Re-fetches specific prompts by id, in the given order, silently
   /// dropping any that no longer exist (e.g. removed from the pool after
-  /// being issued to someone).
+  /// being issued to someone). Served from the same cached pool as
+  /// [pickRandom] rather than one read per id.
   Future<List<Prompt>> getByIds(List<String> ids) async {
-    final docs = await Future.wait(
-      ids.map((id) => _firestore.collection('prompts').doc(id).get()),
-    );
-    return docs.where((doc) => doc.exists).map(Prompt.fromDoc).toList();
+    final byId = {for (final p in await _pool()) p.id: p};
+    return ids.map((id) => byId[id]).whereType<Prompt>().toList();
   }
 }

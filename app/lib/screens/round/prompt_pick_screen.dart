@@ -42,23 +42,22 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
   Future<List<Prompt>> _loadPrompts() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    final issuedIds = await _roomService.getIssuedPromptIds(
-      widget.roomId,
-      uid,
-    );
+    final issuedIds = await _roomService.getIssuedPromptIds(widget.roomId, uid);
     if (issuedIds != null && issuedIds.isNotEmpty) {
       return _promptService.getByIds(issuedIds);
     }
 
     final picked = await _promptService.pickRandom();
-    await _roomService.setIssuedPromptIds(
+    final wonRace = await _roomService.setIssuedPromptIds(
       widget.roomId,
       uid,
       picked.map((p) => p.id).toList(),
     );
-    // setIssuedPromptIds silently no-ops if something else already set
-    // it first (a race) — re-read so a beaten write can't show prompts
-    // that don't match what's actually persisted.
+    if (wonRace) return picked;
+
+    // Lost the race — something else set this member's prompts first, so
+    // re-read to show what's actually persisted rather than the pick that
+    // got discarded. Only pay this extra round trip in that rare case.
     final confirmedIds = await _roomService.getIssuedPromptIds(
       widget.roomId,
       uid,

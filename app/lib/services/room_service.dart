@@ -395,10 +395,12 @@ class RoomService {
   /// Persists [promptIds] as this member's issued prompts. Succeeds only
   /// once — firestore.rules refuses the write once `issuedPromptIds`
   /// already exists on the doc, which is what actually enforces "no
-  /// swapping once you start" rather than just claiming it on screen. A
-  /// second call (e.g. a race) is swallowed rather than surfaced as an
-  /// error — the caller should re-read via [getIssuedPromptIds] instead.
-  Future<void> setIssuedPromptIds(
+  /// swapping once you start" rather than just claiming it on screen.
+  /// Returns false if something else (e.g. a second tab) already set it
+  /// first — the caller should re-read via [getIssuedPromptIds] only in
+  /// that case, not on every call, since that race is rare and a
+  /// same-doc round trip on the common path is pure added latency.
+  Future<bool> setIssuedPromptIds(
     String roomId,
     String uid,
     List<String> promptIds,
@@ -410,8 +412,10 @@ class RoomService {
           .collection('members')
           .doc(uid)
           .update({'issuedPromptIds': promptIds});
+      return true;
     } on FirebaseException catch (e) {
-      if (e.code != 'permission-denied') rethrow;
+      if (e.code == 'permission-denied') return false;
+      rethrow;
     }
   }
 }

@@ -274,6 +274,14 @@ class _RoomBody extends StatelessWidget {
                       roomId: room.id,
                       roundLengthHours: room.roundLengthHours,
                     );
+                    // Same landing spot every other member gets bounced to
+                    // once the round starts — see RoomScreen's own
+                    // auto-navigate, which skips the owner deliberately.
+                    if (context.mounted) {
+                      context.pushReplacement(
+                        '${AppRoutes.rooms}/${room.id}/round',
+                      );
+                    }
                   } on RoomServiceException catch (e) {
                     if (context.mounted) {
                       ScaffoldMessenger.of(
