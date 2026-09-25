@@ -11,6 +11,7 @@ import '../theme/app_tokens.dart';
 import '../utils/dashed_path.dart';
 import '../utils/initials.dart';
 import '../widgets/app_avatar.dart';
+import '../widgets/app_chip.dart';
 import 'join_room_sheet.dart';
 
 /// Reads the signed-in user's rooms live from Firestore — every room the
@@ -225,7 +226,9 @@ class _RoomCard extends StatelessWidget {
                   if (isPaused)
                     const Icon(Icons.pause_rounded, color: AppColors.ink)
                   else if (room.timeLabel != null)
-                    _TimeChip(label: room.timeLabel!, attention: isNeedsYou),
+                    isNeedsYou
+                        ? AttentionChip(room.timeLabel!)
+                        : NeutralChip(room.timeLabel!),
                 ],
               ),
               if (!isPaused) ...[
@@ -251,38 +254,6 @@ class _RoomCard extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _TimeChip extends StatelessWidget {
-  const _TimeChip({required this.label, required this.attention});
-
-  final String label;
-
-  /// §3 "Chip": white fill = neutral. Ink fill with accent text =
-  /// attention — used here for the room that needs you.
-  final bool attention;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final onInk = theme.colorScheme.onSecondary;
-    final labelStyle = theme.chipTheme.labelStyle;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
-      decoration: BoxDecoration(
-        color: attention ? AppColors.ink : AppColors.white,
-        borderRadius: AppRadius.chipRadius,
-        border: attention
-            ? null
-            : Border.all(color: AppColors.ink, width: AppBorders.thin),
-      ),
-      child: Text(
-        label,
-        style: labelStyle?.copyWith(color: attention ? onInk : AppColors.ink),
       ),
     );
   }

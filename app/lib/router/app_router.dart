@@ -4,7 +4,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 
+import '../models/prompt.dart';
 import '../screens/create_room_screen.dart';
+import '../screens/drawing_screen.dart';
 import '../screens/email_login_screen.dart';
 import '../screens/forgot_password_screen.dart';
 import '../screens/game_screen.dart';
@@ -46,6 +48,11 @@ class AppRoutes {
   /// `rooms/{roomId}/members/{uid}.issuedPromptIds` so it stays stable
   /// across visits.
   static const promptPick = '/rooms/:roomId/prompt-pick';
+
+  /// `/rooms/:roomId/draw` — Design.md §5 "Draw / editor". The chosen
+  /// [Prompt] travels via `extra` (it's not URL-safe data, and there's no
+  /// server-side "current prompt" to look up instead).
+  static const draw = '/rooms/:roomId/draw';
   static const game = '/game';
 }
 
@@ -123,6 +130,13 @@ GoRouter buildAppRouter(AuthService authService) {
         path: AppRoutes.promptPick,
         builder: (context, state) =>
             PromptPickScreen(roomId: state.pathParameters['roomId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.draw,
+        builder: (context, state) => DrawingScreen(
+          roomId: state.pathParameters['roomId']!,
+          prompt: state.extra! as Prompt,
+        ),
       ),
       GoRoute(
         path: AppRoutes.game,

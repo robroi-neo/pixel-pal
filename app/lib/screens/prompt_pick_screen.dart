@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/prompt.dart';
+import '../router/app_router.dart';
 import '../services/prompt_service.dart';
 import '../services/room_service.dart';
 import '../theme/app_colors.dart';
@@ -21,8 +22,8 @@ import '../widgets/app_button.dart';
 /// back shows the same 3, and "no swapping once you start" is an actual
 /// guarantee, not just copy. What's still not real: per-round scoping
 /// (Implementations.md Phase 3 doesn't exist, so there's one persistent
-/// set per member rather than one per round) and "Start drawing" itself
-/// — the editor is Phase 2, not started, so it's a no-op.
+/// set per member rather than one per round). "Start drawing" opens
+/// [DrawingScreen] with the picked prompt.
 class PromptPickScreen extends StatefulWidget {
   const PromptPickScreen({super.key, required this.roomId});
 
@@ -130,7 +131,15 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
                   AppButton(
                     label: 'Start drawing',
                     enabled: _selectedId != null,
-                    onPressed: () async {},
+                    onPressed: () async {
+                      final selected = prompts.firstWhere(
+                        (p) => p.id == _selectedId,
+                      );
+                      context.push(
+                        '${AppRoutes.rooms}/${widget.roomId}/draw',
+                        extra: selected,
+                      );
+                    },
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Center(

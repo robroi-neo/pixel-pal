@@ -11,6 +11,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
 import '../theme/app_tokens.dart';
 import '../widgets/app_button.dart';
+import '../widgets/app_chip.dart';
 
 /// Design.md §5 "Round home (hub)": one primary button, the other routes
 /// are text links; two task cards (drawing, guessing) with the unstarted
@@ -174,8 +175,8 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
                           ),
                         ),
                         hasPrompt
-                            ? _NeutralChip('prompt picked')
-                            : _AttentionChip('not started'),
+                            ? NeutralChip('prompt picked')
+                            : AttentionChip('not started'),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -276,7 +277,7 @@ class _RoundDeadlineRow extends StatelessWidget {
 
     return Row(
       children: [
-        locked ? const _AttentionChip('locked') : _hoursLeftChip(endsAt),
+        locked ? const AttentionChip('locked') : _hoursLeftChip(endsAt),
         const SizedBox(width: AppSpacing.sm),
         Flexible(
           child: Text(
@@ -298,7 +299,7 @@ class _RoundDeadlineRow extends StatelessWidget {
     final label = remaining.inHours >= 1
         ? '${remaining.inHours}h left'
         : '${remaining.inMinutes.clamp(0, 59)}m left';
-    return _NeutralChip(label);
+    return NeutralChip(label);
   }
 }
 
@@ -328,50 +329,6 @@ class _SegmentedProgress extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// §3 "Chip": white fill, neutral.
-class _NeutralChip extends StatelessWidget {
-  const _NeutralChip(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final labelStyle = Theme.of(context).chipTheme.labelStyle;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: AppRadius.chipRadius,
-        border: Border.all(color: AppColors.ink, width: AppBorders.thin),
-      ),
-      child: Text(label, style: labelStyle?.copyWith(color: AppColors.ink)),
-    );
-  }
-}
-
-/// §3 "Chip": ink fill with accent text — attention, for the task that
-/// needs you.
-class _AttentionChip extends StatelessWidget {
-  const _AttentionChip(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final onInk = theme.colorScheme.onSecondary;
-    final labelStyle = theme.chipTheme.labelStyle;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
-      decoration: BoxDecoration(
-        color: AppColors.ink,
-        borderRadius: AppRadius.chipRadius,
-      ),
-      child: Text(label, style: labelStyle?.copyWith(color: onInk)),
     );
   }
 }
