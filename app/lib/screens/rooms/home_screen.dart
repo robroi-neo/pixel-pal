@@ -8,12 +8,14 @@ import '../../services/room_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
+import '../../utils/clipboard.dart';
 import '../../utils/dashed_path.dart';
 import '../../utils/initials.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_chip.dart';
 import '../../widgets/loading_view.dart';
 import 'join_room_sheet.dart';
+import 'room_actions_sheet.dart';
 
 /// Reads the signed-in user's rooms live from Firestore — every room the
 /// user is a member of, whether they created it or joined it by code
@@ -28,6 +30,10 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  /// Rooms deleted with an undo window still open — hidden from the list
+  /// now, only actually deleted once the undo snackbar closes.
+  final Set<String> _pendingDeleteIds = {};
+
   @override
   Widget build(BuildContext context) {
     final user = AuthService().currentUser;
@@ -91,7 +97,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: LoadingView(),
                       );
                     }
-                    final rooms = snapshot.data!;
+                    final rooms = snapshot.data!
+                        .where((r) => !_pendingDeleteIds.contains(r.id))
+                        .toList();
                     if (rooms.isEmpty) {
                       return Text(
                         'No rooms yet — start one below.',
@@ -112,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ? '${AppRoutes.rooms}/${room.id}/round'
                                   : '${AppRoutes.rooms}/${room.id}',
                             ),
-                            onRemove: () => _confirmRemove(room),
+                            onMore: () => _openRoomActions(room),
                           ),
                           const SizedBox(height: AppSpacing.md),
                         ],
@@ -132,18 +140,67 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// Owner deletes the room for everyone; a member just leaves it.
-  Future<void> _confirmRemove(RoomSummary room) async {
-    final isOwner = room.isOwner;
+  Future<void> _openRoomActions(RoomSummary room) async {
+    final action = await RoomActionsSheet.show(context, room);
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case RoomAction.copyCode:
+        await copyToClipboard(context, room.code, confirmation: 'Code copied');
+      case RoomAction.leave:
+        await _confirmLeave(room);
+      case RoomAction.delete:
+        if (room.isRoundStarted) {
+          if (await DeleteRoomDialog.show(context, room)) {
+            await _runRemoval(
+              () => RoomService().deleteRoom(roomId: room.id, code: room.code),
+            );
+          }
+        } else {
+          _deleteWithUndo(room);
+        }
+    }
+  }
+
+  /// Never played, so nothing is lost — no dialog, just an undo window.
+  /// The card hides immediately; the real delete only runs once the
+  /// snackbar closes without "Undo" (timeout, swipe, or being replaced).
+  /// If the app dies mid-window the room survives, which is the safe way
+  /// round.
+  void _deleteWithUndo(RoomSummary room) {
+    setState(() => _pendingDeleteIds.add(room.id));
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    final controller = messenger.showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 5),
+        content: _UndoDeleteContent(
+          title: '${room.title} deleted',
+          onUndo: () => messenger.hideCurrentSnackBar(
+            reason: SnackBarClosedReason.action,
+          ),
+        ),
+      ),
+    );
+
+    controller.closed.then((reason) async {
+      if (reason != SnackBarClosedReason.action) {
+        try {
+          await RoomService().deleteRoom(roomId: room.id, code: room.code);
+        } on RoomServiceException catch (e) {
+          messenger.showSnackBar(SnackBar(content: Text(e.message)));
+        }
+      }
+      if (mounted) setState(() => _pendingDeleteIds.remove(room.id));
+    });
+  }
+
+  Future<void> _confirmLeave(RoomSummary room) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(isOwner ? 'Delete this room?' : 'Leave this room?'),
+        title: const Text('Leave this room?'),
         content: Text(
-          isOwner
-              ? '"${room.title}" will be removed for everyone in it. '
-                    "This can't be undone."
-              : "You'll need the invite code to rejoin \"${room.title}\".",
+          "You'll need the invite code to rejoin \"${room.title}\".",
         ),
         actions: [
           TextButton(
@@ -152,19 +209,19 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text(isOwner ? 'Delete' : 'Leave'),
+            child: const Text('Leave'),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed == true) {
+      await _runRemoval(() => RoomService().leaveRoom(room.id));
+    }
+  }
 
+  Future<void> _runRemoval(Future<void> Function() removal) async {
     try {
-      if (isOwner) {
-        await RoomService().deleteRoom(roomId: room.id, code: room.code);
-      } else {
-        await RoomService().leaveRoom(room.id);
-      }
+      await removal();
     } on RoomServiceException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -175,18 +232,77 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+class _UndoDeleteContent extends StatelessWidget {
+  const _UndoDeleteContent({required this.title, required this.onUndo});
+
+  final String title;
+  final VoidCallback onUndo;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: accent,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                'Nothing had been played',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: AppColors.cream.withValues(alpha: 0.75),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: AppSpacing.md),
+        OutlinedButton(
+          onPressed: onUndo,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: accent,
+            side: BorderSide(color: accent, width: AppBorders.thick),
+            shape: const StadiumBorder(),
+            // The theme's outlined button is full-width; inside a
+            // snackbar row it has to size to its label.
+            minimumSize: const Size(
+              AppSizes.minTouchTarget,
+              AppSizes.minTouchTarget,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+          ),
+          child: const Text('Undo'),
+        ),
+      ],
+    );
+  }
+}
+
 class _RoomCard extends StatelessWidget {
   const _RoomCard({
     required this.room,
     required this.onTap,
-    required this.onRemove,
+    required this.onMore,
   });
 
   final RoomSummary room;
   final VoidCallback onTap;
 
-  /// Delete (owner) or leave (member) — the card's icon picks which.
-  final VoidCallback onRemove;
+  /// Opens [RoomActionsSheet] — delete vs. leave is decided there, not by
+  /// a different icon on the card.
+  final VoidCallback onMore;
 
   @override
   Widget build(BuildContext context) {
@@ -271,21 +387,20 @@ class _RoomCard extends StatelessWidget {
                     isNeedsYou
                         ? AttentionChip(room.timeLabel!)
                         : NeutralChip(room.timeLabel!),
-                  IconButton(
-                    onPressed: onRemove,
-                    tooltip: room.isOwner ? 'Delete room' : 'Leave room',
-                    icon: Icon(
-                      room.isOwner
-                          ? Icons.delete_outline
-                          : Icons.logout_rounded,
-                      size: 20,
-                      color: titleColor,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
+                  // Full 44px target, nudged into the card's corner padding
+                  // so the dots line up with the title rather than sitting
+                  // inset from it.
+                  Transform.translate(
+                    offset: const Offset(AppSpacing.sm, -AppSpacing.sm),
+                    child: IconButton(
+                      onPressed: onMore,
+                      tooltip: 'Room options',
+                      icon: Icon(Icons.more_horiz, color: titleColor),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: AppSizes.minTouchTarget,
+                        minHeight: AppSizes.minTouchTarget,
+                      ),
                     ),
                   ),
                 ],

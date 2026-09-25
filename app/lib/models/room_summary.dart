@@ -20,6 +20,7 @@ class RoomSummary {
     required this.subtitle,
     required this.status,
     required this.isOwner,
+    required this.memberCount,
     this.timeLabel,
     this.members = const [],
     this.overflowCount,
@@ -46,6 +47,8 @@ class RoomSummary {
   /// mark on the room card, and gates whether tapping it opens the room
   /// screen (only built for the owner's view so far).
   final bool isOwner;
+
+  final int memberCount;
 
   /// e.g. "18h left" — null until the round engine exists to produce one.
   final String? timeLabel;
@@ -83,6 +86,7 @@ class RoomSummary {
           : 'Round 1 · $memberCount $playerWord',
       status: RoomStatus.waiting,
       isOwner: data['ownerUid'] == currentUid,
+      memberCount: memberCount,
       members: preview,
       overflowCount: overflow > 0 ? overflow : null,
       roundEndsAt: roundEndsAt,

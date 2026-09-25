@@ -34,7 +34,11 @@ class DrawingService {
   final FirebaseAuth _auth;
 
   DocumentReference<Map<String, dynamic>> _ref(String roomId, String uid) =>
-      _firestore.collection('rooms').doc(roomId).collection('drawings').doc(uid);
+      _firestore
+          .collection('rooms')
+          .doc(roomId)
+          .collection('drawings')
+          .doc(uid);
 
   /// Live — so the editor can notice a drawing already exists (e.g. the
   /// screen was reopened after submitting) without a manual refresh.
@@ -61,6 +65,19 @@ class DrawingService {
               .map(DrawingSubmission.fromDoc)
               .toList(),
         );
+  }
+
+  /// How many drawings exist in this room, including the caller's own —
+  /// for naming the cost of deleting it. A server-side count aggregate,
+  /// so it doesn't download the drawings themselves.
+  Future<int> countDrawings(String roomId) async {
+    final snapshot = await _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('drawings')
+        .count()
+        .get();
+    return snapshot.count ?? 0;
   }
 
   Future<void> submitDrawing({
@@ -97,7 +114,9 @@ class DrawingService {
           "not a member of this room.",
         );
       }
-      throw DrawingServiceException("Couldn't submit your drawing — try again.");
+      throw DrawingServiceException(
+        "Couldn't submit your drawing — try again.",
+      );
     }
   }
 }
