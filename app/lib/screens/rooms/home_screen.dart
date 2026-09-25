@@ -110,15 +110,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         for (final room in rooms) ...[
                           _RoomCard(
                             room: room,
-                            // Owner -> the invite/waiting screen.
-                            // Everyone else -> the round hub. The owner
-                            // doesn't see the hub yet — giving them that
-                            // once a room has real rounds running is
-                            // follow-up work.
                             onTap: () => context.push(
-                              room.isOwner
-                                  ? '${AppRoutes.rooms}/${room.id}'
-                                  : '${AppRoutes.rooms}/${room.id}/round',
+                              '${AppRoutes.rooms}/${room.id}/round',
                             ),
                             // Long-press, like sign-out on the avatar —
                             // Design.md's card has no slot for a menu.

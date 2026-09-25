@@ -21,10 +21,8 @@ import '../../widgets/app_chip.dart';
 /// are text links; two task cards (drawing, guessing) with the unstarted
 /// one carrying the shadow.
 ///
-/// Reached by tapping a room you *didn't* create — the owner's tap still
-/// goes to [RoomScreen] (the invite/waiting view) for now; giving the
-/// owner this same hub once a room has real rounds running is follow-up
-/// work, not done here.
+/// Reached by tapping any room in the list, owner included — the owner
+/// gets to [RoomScreen] (the invite view) from the app bar menu.
 ///
 /// The round engine doesn't exist yet (Implementations.md Phase 3), so
 /// "Round 1" is a placeholder — but room name, canvas size, the round
@@ -56,11 +54,19 @@ class RoundHomeScreen extends StatelessWidget {
             ),
             title: Text(room?.name ?? '', style: textTheme.titleMedium),
             actions: [
-              IconButton(
-                // Room settings / leave room aren't built yet.
-                icon: const Icon(Icons.more_horiz),
-                onPressed: () {},
-              ),
+              // Owner-only: the invite screen is otherwise unreachable now
+              // that owners land here too.
+              if (room != null &&
+                  room.isOwnedBy(FirebaseAuth.instance.currentUser?.uid ?? ''))
+                PopupMenuButton<void>(
+                  icon: const Icon(Icons.more_horiz),
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      onTap: () => context.push('${AppRoutes.rooms}/$roomId'),
+                      child: const Text('Invite players'),
+                    ),
+                  ],
+                ),
             ],
           ),
           body: SafeArea(
