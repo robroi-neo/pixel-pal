@@ -60,10 +60,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: AppSpacing.xl),
               if (user == null)
-                Text(
-                  'Sign in to see your rooms.',
-                  style: textTheme.bodyMedium,
-                )
+                Text('Sign in to see your rooms.', style: textTheme.bodyMedium)
               else
                 StreamBuilder<List<RoomSummary>>(
                   // A fresh Stream instance every build (nothing here is
@@ -93,7 +90,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           padding: EdgeInsets.symmetric(
                             vertical: AppSpacing.xl,
                           ),
-                          child: CircularProgressIndicator(color: AppColors.ink),
+                          child: CircularProgressIndicator(
+                            color: AppColors.ink,
+                          ),
                         ),
                       );
                     }
@@ -110,8 +109,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         for (final room in rooms) ...[
                           _RoomCard(
                             room: room,
+                            // Lobby until the owner starts the round —
+                            // then everyone, owner included, goes to the
+                            // hub instead.
                             onTap: () => context.push(
-                              '${AppRoutes.rooms}/${room.id}/round',
+                              room.isRoundStarted
+                                  ? '${AppRoutes.rooms}/${room.id}/round'
+                                  : '${AppRoutes.rooms}/${room.id}',
                             ),
                             onRemove: () => _confirmRemove(room),
                           ),
@@ -168,8 +172,9 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } on RoomServiceException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }

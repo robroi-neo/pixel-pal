@@ -74,9 +74,12 @@ service cloud.firestore {
       // access control is the invite code, not this read.
       allow read: if request.auth != null;
 
+      // roundEndsAt is deliberately not in this list — a room is created
+      // in the lobby, never mid-round. It's added later, exactly once, by
+      // the "start round" update rule below.
       allow create: if request.auth != null
         && request.resource.data.keys().hasOnly([
-              'name', 'code', 'canvasSize', 'roundLengthHours', 'roundEndsAt',
+              'name', 'code', 'canvasSize', 'roundLengthHours',
               'ownerUid', 'ownerDisplayName', 'memberCount', 'memberUids',
               'memberPreview', 'createdAt',
             ])
@@ -94,14 +97,6 @@ service cloud.firestore {
         && request.resource.data.code.size() == 6
         && request.resource.data.canvasSize in [16, 32, 64]
         && request.resource.data.roundLengthHours in [12, 24, 48]
-        // roundEndsAt is computed from the client's own clock (there's no
-        // Cloud Function to stamp it authoritatively — see CLAUDE.md on
-        // Spark), so this can't check it equals request.time + the exact
-        // round length; a loose bound just stops an absurd/far-future
-        // value. 49h, not 48h, gives an hour of clock-skew slack.
-        && request.resource.data.roundEndsAt is timestamp
-        && request.resource.data.roundEndsAt > request.time
-        && request.resource.data.roundEndsAt < request.time + duration.value(49, 'h')
         && request.resource.data.createdAt == request.time;
 
       allow update: if request.auth != null
@@ -123,8 +118,27 @@ service cloud.firestore {
         && request.resource.data.canvasSize == resource.data.canvasSize
         && request.resource.data.roundLengthHours ==
             resource.data.roundLengthHours
-        && request.resource.data.roundEndsAt == resource.data.roundEndsAt
+        // .get(..., null) rather than dot access: roundEndsAt may not
+        // exist yet (the room's still in its lobby), and reading a
+        // genuinely absent map key errors out rules rather than nulling.
+        && request.resource.data.get('roundEndsAt', null) ==
+            resource.data.get('roundEndsAt', null)
         && request.resource.data.createdAt == resource.data.createdAt;
+
+      // Starting the round (RoomService.startRound): owner-only, and only
+      // from unset — once roundEndsAt exists this can't be satisfied
+      // again, same one-shot pattern as members/{uid}.issuedPromptIds
+      // below. 49h (not 48h) gives an hour of clock-skew slack, since
+      // roundEndsAt is computed from the owner's own device clock (Spark
+      // has no Cloud Function to stamp it authoritatively).
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.ownerUid
+        && !('roundEndsAt' in resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['roundEndsAt'])
+        && request.resource.data.roundEndsAt is timestamp
+        && request.resource.data.roundEndsAt > request.time
+        && request.resource.data.roundEndsAt < request.time + duration.value(49, 'h');
 
       // Leaving (RoomService.leaveRoom): a non-owner member removes only
       // themselves. memberPreview may lose at most one entry — theirs.

@@ -91,14 +91,19 @@ class RoomService {
         .collection('rooms')
         .doc(roomId)
         .snapshots()
-        .map((snapshot) => snapshot.exists ? RoomDetail.fromDoc(snapshot) : null);
+        .map(
+          (snapshot) => snapshot.exists ? RoomDetail.fromDoc(snapshot) : null,
+        );
   }
 
   /// Owner-only. Subcollections (members, drawings, guesses) are left
   /// orphaned — Spark has no Cloud Function to cascade the delete, and the
   /// owner can't read other members' guesses to remove them. They become
   /// unreachable once the room doc is gone, since their rules check it.
-  Future<void> deleteRoom({required String roomId, required String code}) async {
+  Future<void> deleteRoom({
+    required String roomId,
+    required String code,
+  }) async {
     try {
       await (_firestore.batch()
             ..delete(_firestore.collection('rooms').doc(roomId))
@@ -177,14 +182,8 @@ class RoomService {
             'code': code,
             'canvasSize': canvasSize,
             'roundLengthHours': roundLengthHours,
-            // Computed from the client's own clock, not a Cloud Function
-            // (Spark — see CLAUDE.md), so it's only as accurate as the
-            // creator's device clock. There's no round engine to advance
-            // this later (Implementations.md Phase 3), so it's really
-            // "round 1 ends at" rather than a rolling deadline.
-            'roundEndsAt': Timestamp.fromDate(
-              DateTime.now().add(Duration(hours: roundLengthHours)),
-            ),
+            // roundEndsAt is deliberately absent — the room sits in the
+            // lobby ([RoomScreen]) until the owner calls [startRound].
             'ownerUid': user.uid,
             'ownerDisplayName': displayName,
             'memberCount': 1,
@@ -212,6 +211,31 @@ class RoomService {
     }
 
     throw RoomServiceException("Couldn't create the room — try again.");
+  }
+
+  /// Owner-only, one-shot — moves a room from the lobby to an active round
+  /// by stamping `roundEndsAt`. firestore.rules refuses this once the
+  /// field already exists, same pattern as [setIssuedPromptIds]. Computed
+  /// from the client's own clock (Spark, no Cloud Function to stamp it
+  /// authoritatively — see CLAUDE.md), from *now*, not from when the room
+  /// was created.
+  Future<void> startRound({
+    required String roomId,
+    required int roundLengthHours,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw RoomServiceException('Sign in to start the round.');
+    }
+    try {
+      await _firestore.collection('rooms').doc(roomId).update({
+        'roundEndsAt': Timestamp.fromDate(
+          DateTime.now().add(Duration(hours: roundLengthHours)),
+        ),
+      });
+    } on FirebaseException {
+      throw RoomServiceException("Couldn't start the round — try again.");
+    }
   }
 
   /// Read-only — resolves a code to a room and reports whether joining is
@@ -243,7 +267,9 @@ class RoomService {
       }
 
       final data = roomSnap.data()!;
-      final memberUids = List<String>.from(data['memberUids'] as List? ?? const []);
+      final memberUids = List<String>.from(
+        data['memberUids'] as List? ?? const [],
+      );
       final preview = RoomPreview(
         roomId: roomId,
         name: (data['name'] as String?) ?? 'Untitled room',
@@ -297,7 +323,9 @@ class RoomService {
         }
 
         final room = roomSnap.data()!;
-        final memberUids = List<String>.from(room['memberUids'] as List? ?? const []);
+        final memberUids = List<String>.from(
+          room['memberUids'] as List? ?? const [],
+        );
 
         if (memberUids.contains(user.uid)) {
           return JoinedRoom(roomId: roomId, roomName: room['name'] as String);
@@ -313,7 +341,9 @@ class RoomService {
           'joinedAt': FieldValue.serverTimestamp(),
         });
 
-        final preview = List<String>.from(room['memberPreview'] as List? ?? const []);
+        final preview = List<String>.from(
+          room['memberPreview'] as List? ?? const [],
+        );
         tx.update(roomRef, {
           'memberCount': FieldValue.increment(1),
           'memberUids': FieldValue.arrayUnion([user.uid]),

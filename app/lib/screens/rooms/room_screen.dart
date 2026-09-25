@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/room_detail.dart';
+import '../../router/app_router.dart';
 import '../../services/room_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -11,26 +12,57 @@ import '../../utils/dashed_path.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
 
-/// A live per-room screen — reached by tapping a room you created on the
-/// room list. Design.md marks create/join room as not designed (§5), so
-/// this follows the mockup directly rather than an existing spec section.
+/// The room's lobby — reached by tapping a room that hasn't started its
+/// round yet (any member, not just the owner: everyone waits here until
+/// the owner taps "Start round"), or by the owner from [RoundHomeScreen]'s
+/// menu afterwards, to view/share the code. Design.md marks create/join
+/// room as not designed (§5), so this follows the mockup directly rather
+/// than an existing spec section.
 ///
-/// Only the owner's view (invite code, waiting for players) is built so
-/// far — a non-owner's view of a room they joined by code isn't designed
-/// yet, which is why [HomeScreen] only wires this up for owned rooms.
-class RoomScreen extends StatelessWidget {
+/// Non-owners currently sitting here are bounced to [RoundHomeScreen] the
+/// moment the owner starts the round (`roundEndsAt` going from null to
+/// set) — the owner isn't, since they may have opened this screen
+/// deliberately, mid-round, just to share the code with more players.
+class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.roomId});
 
   final String roomId;
+
+  @override
+  State<RoomScreen> createState() => _RoomScreenState();
+}
+
+class _RoomScreenState extends State<RoomScreen> {
+  late final Stream<RoomDetail?> _room = RoomService().watchRoom(widget.roomId);
+  bool _navigatedToHub = false;
+
+  void _maybeNavigateToHub(RoomDetail? room) {
+    final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
+    if (_navigatedToHub ||
+        room == null ||
+        !room.isRoundStarted ||
+        room.isOwnedBy(uid)) {
+      return;
+    }
+    _navigatedToHub = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.pushReplacement('${AppRoutes.rooms}/${widget.roomId}/round');
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
 
     return StreamBuilder<RoomDetail?>(
-      stream: RoomService().watchRoom(roomId),
+      stream: _room,
       builder: (context, snapshot) {
         final room = snapshot.data;
+        _maybeNavigateToHub(room);
+        final isOwner =
+            room != null &&
+            room.isOwnedBy(FirebaseAuth.instance.currentUser?.uid ?? '');
 
         return Scaffold(
           appBar: AppBar(
@@ -40,8 +72,7 @@ class RoomScreen extends StatelessWidget {
             ),
             title: Text(room?.name ?? '', style: textTheme.titleMedium),
             actions: [
-              if (room != null &&
-                  room.isOwnedBy(FirebaseAuth.instance.currentUser?.uid ?? ''))
+              if (isOwner)
                 PopupMenuButton<void>(
                   icon: const Icon(Icons.more_horiz),
                   itemBuilder: (_) => [
@@ -77,7 +108,7 @@ class RoomScreen extends StatelessWidget {
                     ),
                   );
                 }
-                return _RoomBody(room: room);
+                return _RoomBody(room: room, isOwner: isOwner);
               },
             ),
           ),
@@ -114,17 +145,19 @@ class RoomScreen extends StatelessWidget {
       if (context.mounted) context.pop();
     } on RoomServiceException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(e.message)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     }
   }
 }
 
 class _RoomBody extends StatelessWidget {
-  const _RoomBody({required this.room});
+  const _RoomBody({required this.room, required this.isOwner});
 
   final RoomDetail room;
+  final bool isOwner;
 
   static const _slotCount = 4;
 
@@ -132,6 +165,7 @@ class _RoomBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final emptySlots = (_slotCount - room.memberCount).clamp(0, _slotCount);
+    final started = room.isRoundStarted;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -139,17 +173,20 @@ class _RoomBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            room.memberCount == 1
+            started
+                ? 'Round 1 is underway'
+                : room.memberCount == 1
                 ? 'Just you so far'
                 : '${room.memberCount} players so far',
             style: textTheme.headlineMedium,
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            room.memberCount == 1
-                ? 'Round 1 opens when someone else joins. Nothing is '
-                      'counting down until then.'
-                : "Round 1 opens once everyone's had their first turn.",
+            started
+                ? 'Share the code below to bring in more players.'
+                : isOwner
+                ? "Start whenever you're ready — solo is fine too."
+                : 'Waiting for ${room.ownerDisplayName} to start round 1.',
             style: textTheme.bodyMedium,
           ),
           const SizedBox(height: AppSpacing.lg),
@@ -188,9 +225,7 @@ class _RoomBody extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         room.code.split('').join(' '),
-                        style: textTheme.headlineMedium?.copyWith(
-                          fontSize: 22,
-                        ),
+                        style: textTheme.headlineMedium?.copyWith(fontSize: 22),
                       ),
                     ],
                   ),
@@ -228,10 +263,37 @@ class _RoomBody extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: AppSpacing.xl),
-          // Needs a share-sheet package this app doesn't depend on yet —
-          // "Copy code" above is the real, working way to share for now.
-          AppButton(label: 'Share the invite', onPressed: () async {}),
+          if (!started) ...[
+            const SizedBox(height: AppSpacing.md),
+            if (isOwner)
+              AppButton(
+                label: 'Start round',
+                onPressed: () async {
+                  try {
+                    await RoomService().startRound(
+                      roomId: room.id,
+                      roundLengthHours: room.roundLengthHours,
+                    );
+                  } on RoomServiceException catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(SnackBar(content: Text(e.message)));
+                    }
+                  }
+                },
+              )
+            else
+              Center(
+                child: Text(
+                  'Waiting for ${room.ownerDisplayName} to start the round…',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: AppColors.ink.withValues(alpha: 0.6),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+          ],
         ],
       ),
     );
@@ -257,7 +319,11 @@ class _CopyCodeButton extends StatelessWidget {
             border: Border.all(color: AppColors.ink, width: AppBorders.thin),
             borderRadius: AppRadius.controlRadius,
           ),
-          child: const Icon(Icons.copy_outlined, size: 20, color: AppColors.ink),
+          child: const Icon(
+            Icons.copy_outlined,
+            size: 20,
+            color: AppColors.ink,
+          ),
         ),
       ),
     );

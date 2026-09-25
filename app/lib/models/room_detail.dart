@@ -9,6 +9,7 @@ class RoomDetail {
     required this.name,
     required this.code,
     required this.ownerUid,
+    required this.ownerDisplayName,
     required this.memberCount,
     required this.memberPreview,
     required this.canvasSize,
@@ -20,19 +21,22 @@ class RoomDetail {
   final String name;
   final String code;
   final String ownerUid;
+  final String ownerDisplayName;
   final int memberCount;
   final List<String> memberPreview;
   final int canvasSize;
   final int roundLengthHours;
 
-  /// Computed client-side at creation (no Cloud Function to stamp it
-  /// authoritatively — Spark, see CLAUDE.md), and there's no round engine
-  /// to advance it (Implementations.md Phase 3), so this is really "round
-  /// 1 ends at" rather than a rolling per-round deadline. Null for rooms
-  /// created before this field existed.
+  /// Stamped by [RoomService.startRound], not at room creation — a room
+  /// sits in the lobby (null) until the owner explicitly starts round 1.
+  /// Null for rooms created before this field existed.
   final DateTime? roundEndsAt;
 
   bool isOwnedBy(String uid) => ownerUid == uid;
+
+  /// Whether the owner has started round 1 yet — the lobby
+  /// ([RoomScreen])/hub ([RoundHomeScreen]) split hinges on this.
+  bool get isRoundStarted => roundEndsAt != null;
 
   /// False (never locked) when [roundEndsAt] is unknown — an absent
   /// deadline isn't the same as a passed one.
@@ -46,6 +50,7 @@ class RoomDetail {
       name: (data['name'] as String?) ?? 'Untitled room',
       code: (data['code'] as String?) ?? '',
       ownerUid: (data['ownerUid'] as String?) ?? '',
+      ownerDisplayName: (data['ownerDisplayName'] as String?) ?? 'the host',
       memberCount: (data['memberCount'] as num?)?.toInt() ?? 1,
       memberPreview: List<String>.from(
         data['memberPreview'] as List? ?? const [],

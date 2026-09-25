@@ -21,8 +21,11 @@ import '../../widgets/app_chip.dart';
 /// are text links; two task cards (drawing, guessing) with the unstarted
 /// one carrying the shadow.
 ///
-/// Reached by tapping any room in the list, owner included — the owner
-/// gets to [RoomScreen] (the invite view) from the app bar menu.
+/// Reached by tapping a room whose round has started (see
+/// `RoomDetail.isRoundStarted`) — everyone, owner included, lands here
+/// once that's true. Before it starts, tapping the room opens [RoomScreen]
+/// (the lobby) instead; the owner can still get back to that lobby from
+/// this screen's app bar menu, e.g. to invite more players mid-round.
 ///
 /// The round engine doesn't exist yet (Implementations.md Phase 3), so
 /// "Round 1" is a placeholder — but room name, canvas size, the round
