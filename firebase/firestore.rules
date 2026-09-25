@@ -154,35 +154,86 @@ service cloud.firestore {
           && request.resource.data.issuedPromptIds.size() == 3;
 
         allow delete: if false;
+
+        // My own attempts at guessing one specific other member's
+        // drawing (authorUid) — doc ID is who I'm guessing, not who's
+        // guessing (that's the outer {uid}, already pinned to me by the
+        // match above and this rule's own request.auth.uid == uid). Max 5
+        // attempts (matches the 5 attempt-marker dots in the mockup);
+        // once solved, or once attempts hits the cap, the doc is locked —
+        // no further updates satisfy either rule below.
+        match /guesses/{authorUid} {
+          allow read: if request.auth != null && request.auth.uid == uid;
+
+          allow create: if request.auth != null
+            && request.auth.uid == uid
+            && authorUid != uid
+            && request.resource.data.keys()
+                .hasOnly(['attempts', 'solved', 'revealedCount', 'updatedAt'])
+            && request.resource.data.attempts == 1
+            && request.resource.data.solved is bool
+            // 0 if the first guess was already correct (doesn't matter
+            // once solved), 1 if it was wrong — Design.md: "reveal one
+            // letter per wrong guess", so a wrong attempt 1 reveals
+            // immediately rather than waiting for attempt 2.
+            && request.resource.data.revealedCount >= 0
+            && request.resource.data.revealedCount <= 1
+            && request.resource.data.updatedAt == request.time;
+
+          allow update: if request.auth != null
+            && request.auth.uid == uid
+            && resource.data.solved == false
+            && resource.data.attempts < 5
+            && request.resource.data.keys().hasOnly(resource.data.keys())
+            && request.resource.data.attempts == resource.data.attempts + 1
+            && request.resource.data.revealedCount >=
+                resource.data.revealedCount
+            && request.resource.data.revealedCount <= resource.data.attempts
+            && request.resource.data.updatedAt == request.time;
+
+          allow delete: if false;
+        }
       }
 
       // One drawing per member per room (no per-round scoping yet —
-      // Implementations.md Phase 3). Only the author can ever read their
-      // own drawing — nobody else, not even the room owner, since the
-      // game's whole point is that a drawing stays hidden until a reveal
-      // step that doesn't exist yet; better to keep it locked down by
-      // default than leak it early. `create` requires actually being a
-      // room member (cross-checked against this room's own memberUids);
-      // `update`/`delete` are always false, which is what makes a
-      // resubmit attempt (a Firestore `update`, since the doc already
-      // exists) fail outright — the real "submitDrawing called exactly
-      // once" guarantee, not just a client-side claim.
+      // Implementations.md Phase 3). Readable by any room member, not
+      // just the author — the guess screen has to render someone else's
+      // drawing. That necessarily also exposes `word` to any member who
+      // reads the doc directly (there's no Cloud Function on Spark to
+      // compare a guess against a hidden answer without exposing it to
+      // *someone* — see the long comment on DrawingSubmission for the
+      // full trade-off); the app's own UI never shows `word` during
+      // guessing, but this is real, known, and worth remembering if this
+      // project ever moves to Blaze and can do this properly via
+      // `private/answer`. `create` requires actually being a room member
+      // (cross-checked against this room's own memberUids); `update`/
+      // `delete` are always false, which is what makes a resubmit attempt
+      // (a Firestore `update`, since the doc already exists) fail
+      // outright — the real "submitDrawing called exactly once"
+      // guarantee, not just a client-side claim.
       match /drawings/{uid} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        allow read: if request.auth != null
+          && request.auth.uid in
+              get(/databases/$(database)/documents/rooms/$(roomId)).data.memberUids;
 
         allow create: if request.auth != null
           && request.auth.uid == uid
           && request.auth.uid in
               get(/databases/$(database)/documents/rooms/$(roomId)).data.memberUids
           && request.resource.data.keys().hasOnly([
-                'authorUid', 'promptId', 'word', 'difficulty', 'multiplier',
-                'canvasSize', 'packedPixels', 'submittedAt',
+                'authorUid', 'authorDisplayName', 'promptId', 'word',
+                'category', 'difficulty', 'multiplier', 'canvasSize',
+                'packedPixels', 'submittedAt',
               ])
           && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.authorDisplayName is string
+          && request.resource.data.authorDisplayName.size() > 0
           && request.resource.data.promptId is string
           && request.resource.data.promptId.size() > 0
           && request.resource.data.word is string
           && request.resource.data.word.size() > 0
+          && request.resource.data.category is string
+          && request.resource.data.category.size() > 0
           && request.resource.data.difficulty in ['easy', 'medium', 'hard']
           && request.resource.data.multiplier is number
           && request.resource.data.canvasSize in [16, 32, 64]

@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../models/drawing_submission.dart';
 import '../models/prompt.dart';
+import '../utils/initials.dart';
 import '../utils/pixel_codec.dart';
 
 /// Thrown by [DrawingService] with copy that's already safe to show the
@@ -42,6 +44,25 @@ class DrawingService {
     return _ref(roomId, uid).snapshots().map((doc) => doc.exists);
   }
 
+  /// Every drawing submitted in this room *except* the caller's own — the
+  /// pool the guess screen picks from. Small rooms (max 8 members), so
+  /// reading the whole subcollection and filtering client-side is simpler
+  /// than trying to query around "not mine" in Firestore.
+  Stream<List<DrawingSubmission>> watchOthersDrawings(String roomId) {
+    final uid = _auth.currentUser?.uid;
+    return _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('drawings')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .where((doc) => doc.id != uid)
+              .map(DrawingSubmission.fromDoc)
+              .toList(),
+        );
+  }
+
   Future<void> submitDrawing({
     required String roomId,
     required Prompt prompt,
@@ -59,8 +80,10 @@ class DrawingService {
     try {
       await _ref(roomId, user.uid).set({
         'authorUid': user.uid,
+        'authorDisplayName': displayNameOr(user.displayName),
         'promptId': prompt.id,
         'word': prompt.word,
+        'category': prompt.category,
         'difficulty': prompt.difficulty.name,
         'multiplier': prompt.multiplier,
         'canvasSize': canvasSize,

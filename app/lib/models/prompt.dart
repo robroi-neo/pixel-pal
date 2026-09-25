@@ -26,12 +26,14 @@ class Prompt {
   const Prompt({
     required this.id,
     required this.word,
+    required this.category,
     required this.difficulty,
     required this.multiplier,
   });
 
   final String id;
   final String word;
+  final String category;
   final PromptDifficulty difficulty;
   final double multiplier;
 
@@ -44,6 +46,7 @@ class Prompt {
     return Prompt(
       id: doc.id,
       word: (data['word'] as String?) ?? '',
+      category: (data['category'] as String?) ?? '',
       difficulty: PromptDifficulty.fromString(
         (data['difficulty'] as String?) ?? 'easy',
       ),

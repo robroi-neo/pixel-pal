@@ -1,9 +1,10 @@
 /**
- * Seeds the global `prompts` pool with 10 dummy words — enough to try the
- * prompt-pick screen (services/prompt_service.dart picks 3 at random from
- * whatever's in this collection). Implementations.md's real design calls
- * for 300-500 prompts, tiered/categorized, issued per room server-side —
- * this is just enough to see the UI work end to end, not that system.
+ * Seeds the global `prompts` pool with 10 dummy words (word, category,
+ * difficulty) — enough to try the prompt-pick and guess screens
+ * (services/prompt_service.dart picks 3 at random from whatever's in
+ * this collection). Implementations.md's real design calls for 300-500
+ * prompts, tiered/categorized, issued per room server-side — this is
+ * just enough to see the UI work end to end, not that system.
  *
  * Setup (once): same as seed-rooms.js — a service account key, then
  * `cd firebase/scripts && npm install` (already done if you ran that
@@ -30,16 +31,16 @@ const MULTIPLIER_BY_DIFFICULTY = {
 };
 
 const WORDS = [
-  ["apple", "easy"],
-  ["umbrella", "easy"],
-  ["cactus", "easy"],
-  ["sandwich", "easy"],
-  ["lighthouse", "medium"],
-  ["bicycle", "medium"],
-  ["telescope", "medium"],
-  ["carnival", "hard"],
-  ["orchestra", "hard"],
-  ["avalanche", "hard"],
+  ["apple", "food", "easy"],
+  ["umbrella", "objects", "easy"],
+  ["cactus", "nature", "easy"],
+  ["sandwich", "food", "easy"],
+  ["lighthouse", "objects", "medium"],
+  ["bicycle", "objects", "medium"],
+  ["telescope", "objects", "medium"],
+  ["carnival", "places", "hard"],
+  ["orchestra", "activities", "hard"],
+  ["avalanche", "nature", "hard"],
 ];
 
 function parseArgs() {
@@ -55,16 +56,17 @@ async function seed(db) {
   console.log(`Seeding ${WORDS.length} prompts...\n`);
 
   const batch = db.batch();
-  for (const [word, difficulty] of WORDS) {
+  for (const [word, category, difficulty] of WORDS) {
     const ref = db.collection("prompts").doc();
     batch.set(ref, {
       word,
+      category,
       difficulty,
       multiplier: MULTIPLIER_BY_DIFFICULTY[difficulty],
       seedTag: SEED_TAG,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    console.log(`  ${word.padEnd(12)} ${difficulty.padEnd(8)} x${MULTIPLIER_BY_DIFFICULTY[difficulty]}`);
+    console.log(`  ${word.padEnd(12)} ${category.padEnd(12)} ${difficulty.padEnd(8)} x${MULTIPLIER_BY_DIFFICULTY[difficulty]}`);
   }
   await batch.commit();
 

@@ -9,6 +9,7 @@ import '../screens/auth/email_login_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
+import '../screens/guess/guess_screen.dart';
 import '../screens/rooms/create_room_screen.dart';
 import '../screens/rooms/home_screen.dart';
 import '../screens/rooms/room_created_screen.dart';
@@ -52,6 +53,9 @@ class AppRoutes {
   /// [Prompt] travels via `extra` (it's not URL-safe data, and there's no
   /// server-side "current prompt" to look up instead).
   static const draw = '/rooms/:roomId/draw';
+
+  /// `/rooms/:roomId/guess` — Design.md §5 "Guess".
+  static const guess = '/rooms/:roomId/guess';
 }
 
 /// Dev-only escape hatch: when true, the auth gate below treats every user
@@ -135,6 +139,11 @@ GoRouter buildAppRouter(AuthService authService) {
           roomId: state.pathParameters['roomId']!,
           prompt: state.extra! as Prompt,
         ),
+      ),
+      GoRoute(
+        path: AppRoutes.guess,
+        builder: (context, state) =>
+            GuessScreen(roomId: state.pathParameters['roomId']!),
       ),
     ],
   );
