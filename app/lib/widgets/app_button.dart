@@ -12,6 +12,7 @@ class AppButton extends StatefulWidget {
     required this.label,
     required this.onPressed,
     this.secondary = false,
+    this.enabled = true,
   });
 
   final String label;
@@ -21,6 +22,10 @@ class AppButton extends StatefulWidget {
   /// Design.md §3). Design.md §4: avoid more than one primary button per
   /// screen.
   final bool secondary;
+
+  /// false shows the button in its theme's disabled colors and ignores
+  /// taps — e.g. prompt pick's "Start drawing" before anything's selected.
+  final bool enabled;
 
   @override
   State<AppButton> createState() => _AppButtonState();
@@ -58,17 +63,13 @@ class _AppButtonState extends State<AppButton> {
           )
         : Text(widget.label);
 
+    final onPressed = (_loading || !widget.enabled) ? null : _handlePressed;
+
     return SizedBox(
       width: double.infinity,
       child: widget.secondary
-          ? OutlinedButton(
-              onPressed: _loading ? null : _handlePressed,
-              child: child,
-            )
-          : ElevatedButton(
-              onPressed: _loading ? null : _handlePressed,
-              child: child,
-            ),
+          ? OutlinedButton(onPressed: onPressed, child: child)
+          : ElevatedButton(onPressed: onPressed, child: child),
     );
   }
 }

@@ -109,15 +109,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         for (final room in rooms) ...[
                           _RoomCard(
                             room: room,
-                            // Only the owner's view of a room is built so
-                            // far (the invite/waiting screen) — tapping a
-                            // room joined by code stays inert until a
-                            // non-owner view exists.
-                            onTap: room.isOwner
-                                ? () => context.push(
-                                    '${AppRoutes.rooms}/${room.id}',
-                                  )
-                                : () {},
+                            // Owner -> the invite/waiting screen.
+                            // Everyone else -> the round hub. The owner
+                            // doesn't see the hub yet — giving them that
+                            // once a room has real rounds running is
+                            // follow-up work.
+                            onTap: () => context.push(
+                              room.isOwner
+                                  ? '${AppRoutes.rooms}/${room.id}'
+                                  : '${AppRoutes.rooms}/${room.id}/round',
+                            ),
                           ),
                           const SizedBox(height: AppSpacing.md),
                         ],

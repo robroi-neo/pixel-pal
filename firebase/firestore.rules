@@ -2,6 +2,15 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // Global word pool for prompt pick — seeded via
+    // firebase/scripts/seed-prompts.js (Admin SDK, bypasses these rules
+    // entirely). No client ever writes here; there's no in-app authoring
+    // UI for prompts.
+    match /prompts/{promptId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     // Spark plan can't run Cloud Functions (any generation needs Blaze,
     // for Cloud Build/Artifact Registry — a platform requirement, not a
     // usage-cost one), so this is written by the client itself right

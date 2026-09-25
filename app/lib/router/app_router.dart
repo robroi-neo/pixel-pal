@@ -11,8 +11,10 @@ import '../screens/game_screen.dart';
 import '../screens/home_screen.dart';
 import '../screens/login_screen.dart';
 import '../screens/register_screen.dart';
+import '../screens/prompt_pick_screen.dart';
 import '../screens/room_created_screen.dart';
 import '../screens/room_screen.dart';
+import '../screens/round_home_screen.dart';
 import '../services/auth_service.dart';
 
 class AppRoutes {
@@ -28,9 +30,21 @@ class AppRoutes {
   static const createRoom = '/create-room';
   static const roomCreated = '/create-room/success';
 
-  /// `/rooms/:roomId` — build with `'$rooms/$roomId'`.
+  /// `/rooms/:roomId` — build with `'$rooms/$roomId'`. The owner's view
+  /// (invite code, waiting for players); see [roundHome] for everyone
+  /// else's view of an ongoing room.
   static const rooms = '/rooms';
   static const roomDetail = '/rooms/:roomId';
+
+  /// `/rooms/:roomId/round` — Design.md §5 "Round home (hub)". Reached by
+  /// non-owners for now; giving the owner this same hub once a room has
+  /// real rounds running is follow-up work.
+  static const roundHome = '/rooms/:roomId/round';
+
+  /// Design.md §5 "Prompt pick". Not room-scoped in the path — there's no
+  /// per-room prompt issuance yet (Implementations.md Phase 3), so this
+  /// doesn't need a roomId to know what to show.
+  static const promptPick = '/prompt-pick';
   static const game = '/game';
 }
 
@@ -98,6 +112,15 @@ GoRouter buildAppRouter(AuthService authService) {
         path: AppRoutes.roomDetail,
         builder: (context, state) =>
             RoomScreen(roomId: state.pathParameters['roomId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.roundHome,
+        builder: (context, state) =>
+            RoundHomeScreen(roomId: state.pathParameters['roomId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.promptPick,
+        builder: (context, state) => const PromptPickScreen(),
       ),
       GoRoute(
         path: AppRoutes.game,

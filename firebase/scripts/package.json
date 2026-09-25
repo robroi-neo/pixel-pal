@@ -4,7 +4,8 @@
   "description": "One-off dev tooling (room seeder, etc.) — not deployed. Kept out of functions/ so `firebase deploy --only functions` never bundles it.",
   "type": "commonjs",
   "scripts": {
-    "seed-rooms": "node seed-rooms.js"
+    "seed-rooms": "node seed-rooms.js",
+    "seed-prompts": "node seed-prompts.js"
   },
   "dependencies": {
     "firebase-admin": "^13.6.0"
