@@ -274,4 +274,42 @@ class RoomService {
       throw RoomServiceException("Couldn't join that room — try again.");
     }
   }
+
+  /// The prompt IDs already issued to this member for their current
+  /// drawing, if any — null if [setIssuedPromptIds] hasn't been called
+  /// yet. There's no real round engine to scope this per-round yet
+  /// (Implementations.md Phase 3), so it's one persistent set per member.
+  Future<List<String>?> getIssuedPromptIds(String roomId, String uid) async {
+    final snapshot = await _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('members')
+        .doc(uid)
+        .get();
+    final ids = snapshot.data()?['issuedPromptIds'];
+    return ids == null ? null : List<String>.from(ids as List);
+  }
+
+  /// Persists [promptIds] as this member's issued prompts. Succeeds only
+  /// once — firestore.rules refuses the write once `issuedPromptIds`
+  /// already exists on the doc, which is what actually enforces "no
+  /// swapping once you start" rather than just claiming it on screen. A
+  /// second call (e.g. a race) is swallowed rather than surfaced as an
+  /// error — the caller should re-read via [getIssuedPromptIds] instead.
+  Future<void> setIssuedPromptIds(
+    String roomId,
+    String uid,
+    List<String> promptIds,
+  ) async {
+    try {
+      await _firestore
+          .collection('rooms')
+          .doc(roomId)
+          .collection('members')
+          .doc(uid)
+          .update({'issuedPromptIds': promptIds});
+    } on FirebaseException catch (e) {
+      if (e.code != 'permission-denied') rethrow;
+    }
+  }
 }

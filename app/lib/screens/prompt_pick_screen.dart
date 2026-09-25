@@ -1,8 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../models/prompt.dart';
 import '../services/prompt_service.dart';
+import '../services/room_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_dimens.dart';
 import '../theme/app_tokens.dart';
@@ -12,22 +14,58 @@ import '../widgets/app_button.dart';
 /// stated on screen.
 ///
 /// Real word/difficulty/multiplier data (seeded — see
-/// firebase/scripts/seed-prompts.js), but not the real system: there's no
-/// per-room "issued prompts" or server-enforced no-reroll yet
-/// (Implementations.md Phase 3). Reopening this screen picks a fresh
-/// random 3 rather than showing what you were actually offered last
-/// time — the on-screen "no swapping" claim is aspirational until that
-/// lands. "Start drawing" is a no-op — the editor is Phase 2, not started.
+/// firebase/scripts/seed-prompts.js). The 3 offered are also real and
+/// stable now: the first visit persists them to this member's
+/// `rooms/{roomId}/members/{uid}.issuedPromptIds`, and firestore.rules
+/// refuses to ever change that field once set — so leaving and coming
+/// back shows the same 3, and "no swapping once you start" is an actual
+/// guarantee, not just copy. What's still not real: per-round scoping
+/// (Implementations.md Phase 3 doesn't exist, so there's one persistent
+/// set per member rather than one per round) and "Start drawing" itself
+/// — the editor is Phase 2, not started, so it's a no-op.
 class PromptPickScreen extends StatefulWidget {
-  const PromptPickScreen({super.key});
+  const PromptPickScreen({super.key, required this.roomId});
+
+  final String roomId;
 
   @override
   State<PromptPickScreen> createState() => _PromptPickScreenState();
 }
 
 class _PromptPickScreenState extends State<PromptPickScreen> {
-  late final Future<List<Prompt>> _prompts = PromptService().pickRandom();
+  final _roomService = RoomService();
+  final _promptService = PromptService();
+  late final Future<List<Prompt>> _prompts = _loadPrompts();
   String? _selectedId;
+
+  Future<List<Prompt>> _loadPrompts() async {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+
+    final issuedIds = await _roomService.getIssuedPromptIds(
+      widget.roomId,
+      uid,
+    );
+    if (issuedIds != null && issuedIds.isNotEmpty) {
+      return _promptService.getByIds(issuedIds);
+    }
+
+    final picked = await _promptService.pickRandom();
+    await _roomService.setIssuedPromptIds(
+      widget.roomId,
+      uid,
+      picked.map((p) => p.id).toList(),
+    );
+    // setIssuedPromptIds silently no-ops if something else already set
+    // it first (a race) — re-read so a beaten write can't show prompts
+    // that don't match what's actually persisted.
+    final confirmedIds = await _roomService.getIssuedPromptIds(
+      widget.roomId,
+      uid,
+    );
+    return confirmedIds == null
+        ? picked
+        : _promptService.getByIds(confirmedIds);
+  }
 
   @override
   Widget build(BuildContext context) {

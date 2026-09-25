@@ -41,10 +41,11 @@ class AppRoutes {
   /// real rounds running is follow-up work.
   static const roundHome = '/rooms/:roomId/round';
 
-  /// Design.md §5 "Prompt pick". Not room-scoped in the path — there's no
-  /// per-room prompt issuance yet (Implementations.md Phase 3), so this
-  /// doesn't need a roomId to know what to show.
-  static const promptPick = '/prompt-pick';
+  /// `/rooms/:roomId/prompt-pick` — Design.md §5 "Prompt pick". Room- (and
+  /// member-) scoped now: what a member is offered is persisted to
+  /// `rooms/{roomId}/members/{uid}.issuedPromptIds` so it stays stable
+  /// across visits.
+  static const promptPick = '/rooms/:roomId/prompt-pick';
   static const game = '/game';
 }
 
@@ -120,7 +121,8 @@ GoRouter buildAppRouter(AuthService authService) {
       ),
       GoRoute(
         path: AppRoutes.promptPick,
-        builder: (context, state) => const PromptPickScreen(),
+        builder: (context, state) =>
+            PromptPickScreen(roomId: state.pathParameters['roomId']!),
       ),
       GoRoute(
         path: AppRoutes.game,

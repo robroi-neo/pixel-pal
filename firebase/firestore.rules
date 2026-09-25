@@ -113,12 +113,13 @@ service cloud.firestore {
 
       allow delete: if false;
 
-      // Not read by the client — the room list uses the room doc's own
-      // denormalized memberPreview/memberCount instead of querying this
-      // subcollection. A member document exists mainly so a future
-      // Blaze upgrade has real per-member records to build on.
+      // A member can read their own doc — needed for prompt pick to know
+      // what it already issued them (see below). Still not queried by
+      // the room list, which uses the room doc's own denormalized
+      // memberPreview/memberCount instead.
       match /members/{uid} {
-        allow read: if false;
+        allow read: if request.auth != null && request.auth.uid == uid;
+
         allow create: if request.auth != null
           && request.auth.uid == uid
           && request.resource.data.keys()
@@ -126,7 +127,24 @@ service cloud.firestore {
           && request.resource.data.role in ['owner', 'member']
           && request.resource.data.status == 'active'
           && request.resource.data.joinedAt == request.time;
-        allow update, delete: if false;
+
+        // The one field a member can ever change on their own doc:
+        // issuedPromptIds, and only from unset to a real value — there's
+        // no real round engine yet (Implementations.md Phase 3) to scope
+        // this per-round, so it's one persistent "current prompts" set
+        // per member. Once it exists, this rule can't be satisfied again
+        // (resource.data already has the key), which is what actually
+        // enforces "no swapping once you start" — the client-side claim
+        // alone wasn't a real guarantee.
+        allow update: if request.auth != null
+          && request.auth.uid == uid
+          && !('issuedPromptIds' in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['issuedPromptIds'])
+          && request.resource.data.issuedPromptIds is list
+          && request.resource.data.issuedPromptIds.size() == 3;
+
+        allow delete: if false;
       }
     }
 

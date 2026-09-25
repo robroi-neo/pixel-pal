@@ -175,7 +175,8 @@ class _RoundHomeBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.xl),
           AppButton(
             label: 'Pick your prompt',
-            onPressed: () async => context.push(AppRoutes.promptPick),
+            onPressed: () async =>
+                context.push('${AppRoutes.rooms}/${room.id}/prompt-pick'),
           ),
           const SizedBox(height: AppSpacing.md),
           Center(

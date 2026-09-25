@@ -35,8 +35,12 @@ class Prompt {
   final PromptDifficulty difficulty;
   final double multiplier;
 
-  factory Prompt.fromDoc(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
-    final data = doc.data();
+  /// Takes the general [DocumentSnapshot] (not [QueryDocumentSnapshot])
+  /// since this is also used for single-doc `.doc(id).get()` reads
+  /// (`PromptService.getByIds`), not just query results — callers must
+  /// check `doc.exists` first, `data()` is nullable otherwise.
+  factory Prompt.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const {};
     return Prompt(
       id: doc.id,
       word: (data['word'] as String?) ?? '',

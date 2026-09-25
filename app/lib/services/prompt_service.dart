@@ -4,11 +4,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/prompt.dart';
 
-/// Reads from the global `prompts` pool. No per-room "issued prompts" or
-/// no-reroll enforcement yet (Implementations.md Phase 3) — every call
-/// just picks a fresh random sample from whatever's seeded, client-side.
-/// See seed-prompts.js for how the pool gets populated on Spark (no
-/// Cloud Function to do this server-side either).
+/// Reads from the global `prompts` pool. See seed-prompts.js for how the
+/// pool gets populated on Spark (no Cloud Function to do this
+/// server-side). Which 3 a given member is actually offered, and keeping
+/// that stable across visits, is `RoomService.getIssuedPromptIds` /
+/// `setIssuedPromptIds`'s job, not this service's — this just knows how
+/// to pick and how to re-fetch by id.
 class PromptService {
   PromptService({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -23,5 +24,15 @@ class PromptService {
     final snapshot = await _firestore.collection('prompts').get();
     final prompts = snapshot.docs.map(Prompt.fromDoc).toList()..shuffle(Random());
     return prompts.take(count).toList();
+  }
+
+  /// Re-fetches specific prompts by id, in the given order, silently
+  /// dropping any that no longer exist (e.g. removed from the pool after
+  /// being issued to someone).
+  Future<List<Prompt>> getByIds(List<String> ids) async {
+    final docs = await Future.wait(
+      ids.map((id) => _firestore.collection('prompts').doc(id).get()),
+    );
+    return docs.where((doc) => doc.exists).map(Prompt.fromDoc).toList();
   }
 }
