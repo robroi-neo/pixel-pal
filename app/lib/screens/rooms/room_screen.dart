@@ -11,6 +11,7 @@ import '../../utils/clipboard.dart';
 import '../../utils/dashed_path.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/loading_view.dart';
 
 /// The room's lobby — reached by tapping a room that hasn't started its
 /// round yet (any member, not just the owner: everyone waits here until
@@ -35,6 +36,29 @@ class RoomScreen extends StatefulWidget {
 class _RoomScreenState extends State<RoomScreen> {
   late final Stream<RoomDetail?> _room = RoomService().watchRoom(widget.roomId);
   bool _navigatedToHub = false;
+  bool _startingRound = false;
+
+  Future<void> _startRound(BuildContext context, RoomDetail room) async {
+    setState(() => _startingRound = true);
+    try {
+      await RoomService().startRound(
+        roomId: room.id,
+        roundLengthHours: room.roundLengthHours,
+      );
+      // Same landing spot every other member gets bounced to once the
+      // round starts — see _maybeNavigateToHub, which skips the owner.
+      if (context.mounted) {
+        context.pushReplacement('${AppRoutes.rooms}/${room.id}/round');
+      }
+    } on RoomServiceException catch (e) {
+      if (mounted) setState(() => _startingRound = false);
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
 
   void _maybeNavigateToHub(RoomDetail? room) {
     final uid = FirebaseAuth.instance.currentUser?.uid ?? '';
@@ -96,9 +120,7 @@ class _RoomScreenState extends State<RoomScreen> {
                   );
                 }
                 if (!snapshot.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: AppColors.ink),
-                  );
+                  return const LoadingView();
                 }
                 if (room == null) {
                   return Center(
@@ -108,7 +130,18 @@ class _RoomScreenState extends State<RoomScreen> {
                     ),
                   );
                 }
-                return _RoomBody(room: room, isOwner: isOwner);
+                // A full-screen takeover, not just the button's own
+                // spinner — the transition covers a real write, and this
+                // makes the wait unmistakable rather than leaving the
+                // rest of the lobby looking idle.
+                if (_startingRound) {
+                  return const LoadingView(message: 'Starting the round…');
+                }
+                return _RoomBody(
+                  room: room,
+                  isOwner: isOwner,
+                  onStartRound: () => _startRound(context, room),
+                );
               },
             ),
           ),
@@ -154,10 +187,15 @@ class _RoomScreenState extends State<RoomScreen> {
 }
 
 class _RoomBody extends StatelessWidget {
-  const _RoomBody({required this.room, required this.isOwner});
+  const _RoomBody({
+    required this.room,
+    required this.isOwner,
+    required this.onStartRound,
+  });
 
   final RoomDetail room;
   final bool isOwner;
+  final VoidCallback onStartRound;
 
   static const _slotCount = 4;
 
@@ -268,28 +306,7 @@ class _RoomBody extends StatelessWidget {
             if (isOwner)
               AppButton(
                 label: 'Start round',
-                onPressed: () async {
-                  try {
-                    await RoomService().startRound(
-                      roomId: room.id,
-                      roundLengthHours: room.roundLengthHours,
-                    );
-                    // Same landing spot every other member gets bounced to
-                    // once the round starts — see RoomScreen's own
-                    // auto-navigate, which skips the owner deliberately.
-                    if (context.mounted) {
-                      context.pushReplacement(
-                        '${AppRoutes.rooms}/${room.id}/round',
-                      );
-                    }
-                  } on RoomServiceException catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(
-                        context,
-                      ).showSnackBar(SnackBar(content: Text(e.message)));
-                    }
-                  }
-                },
+                onPressed: () async => onStartRound(),
               )
             else
               Center(

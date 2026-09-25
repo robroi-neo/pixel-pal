@@ -16,6 +16,7 @@ import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_chip.dart';
+import '../../widgets/loading_view.dart';
 
 /// Design.md §5 "Round home (hub)": one primary button, the other routes
 /// are text links; two task cards (drawing, guessing) with the unstarted
@@ -84,9 +85,7 @@ class RoundHomeScreen extends StatelessWidget {
                   );
                 }
                 if (!snapshot.hasData) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: AppColors.ink),
-                  );
+                  return const LoadingView();
                 }
                 if (room == null) {
                   return Center(

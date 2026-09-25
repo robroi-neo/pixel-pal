@@ -11,6 +11,7 @@ import '../../utils/initials.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_chip.dart';
+import '../../widgets/loading_view.dart';
 import '../../widgets/pixel_canvas.dart';
 
 /// Design.md §5 "Guess": letter tiles, attempt markers, fuzzy submit.
@@ -67,9 +68,7 @@ class _GuessScreenState extends State<GuessScreen> {
     Map<String, GuessProgress> guesses,
   ) {
     final undone =
-        drawings
-            .where((d) => !(guesses[d.authorUid]?.isDone ?? false))
-            .toList()
+        drawings.where((d) => !(guesses[d.authorUid]?.isDone ?? false)).toList()
           ..sort((a, b) => a.authorUid.compareTo(b.authorUid));
     if (undone.isEmpty) {
       _currentAuthorUid = null;
@@ -91,7 +90,10 @@ class _GuessScreenState extends State<GuessScreen> {
     });
   }
 
-  Future<void> _handleGuess(DrawingSubmission drawing, GuessProgress progress) async {
+  Future<void> _handleGuess(
+    DrawingSubmission drawing,
+    GuessProgress progress,
+  ) async {
     final text = _guessController.text.trim();
     if (text.isEmpty) return;
 
@@ -143,9 +145,7 @@ class _GuessScreenState extends State<GuessScreen> {
               );
             }
             if (!drawingsSnapshot.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(color: AppColors.ink),
-              );
+              return const LoadingView();
             }
             final drawings = drawingsSnapshot.data!;
 
@@ -177,7 +177,8 @@ class _GuessScreenState extends State<GuessScreen> {
                   );
                 }
 
-                final progress = guesses[current.authorUid] ?? GuessProgress.initial;
+                final progress =
+                    guesses[current.authorUid] ?? GuessProgress.initial;
                 return _GuessBody(
                   drawing: current,
                   progress: progress,
@@ -238,7 +239,10 @@ class _GuessBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              AppAvatar(initials: initialsFor(drawing.authorDisplayName), size: 32),
+              AppAvatar(
+                initials: initialsFor(drawing.authorDisplayName),
+                size: 32,
+              ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
@@ -263,7 +267,10 @@ class _GuessBody extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.white,
                 borderRadius: AppRadius.cardRadius,
-                border: Border.all(color: AppColors.ink, width: AppBorders.thick),
+                border: Border.all(
+                  color: AppColors.ink,
+                  width: AppBorders.thick,
+                ),
               ),
               child: AspectRatio(
                 aspectRatio: 1,

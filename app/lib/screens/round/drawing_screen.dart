@@ -10,6 +10,7 @@ import '../../theme/app_dimens.dart';
 import '../../theme/app_palette.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_chip.dart';
+import '../../widgets/loading_view.dart';
 import '../../widgets/pixel_canvas.dart';
 
 enum _EditorTool { pencil, fill, eraser }
@@ -176,9 +177,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
           ),
           body: SafeArea(
             child: !snapshot.hasData
-                ? const Center(
-                    child: CircularProgressIndicator(color: AppColors.ink),
-                  )
+                ? const LoadingView()
                 : room == null
                 ? Center(
                     child: Text(
@@ -302,7 +301,10 @@ class _EditorBody extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.white,
                 borderRadius: AppRadius.cardRadius,
-                border: Border.all(color: AppColors.ink, width: AppBorders.thick),
+                border: Border.all(
+                  color: AppColors.ink,
+                  width: AppBorders.thick,
+                ),
               ),
               child: AspectRatio(
                 aspectRatio: 1,
@@ -361,13 +363,19 @@ class _EditorBody extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppColors.canvas,
                       borderRadius: AppRadius.controlRadius,
-                      border: Border.all(color: AppColors.ink, width: AppBorders.thin),
+                      border: Border.all(
+                        color: AppColors.ink,
+                        width: AppBorders.thin,
+                      ),
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(
                         AppRadius.control - AppBorders.thin,
                       ),
-                      child: PixelPreview(canvasSize: canvasSize, pixels: pixels),
+                      child: PixelPreview(
+                        canvasSize: canvasSize,
+                        pixels: pixels,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -460,7 +468,11 @@ class _ToolButton extends StatelessWidget {
 }
 
 class _Swatch extends StatelessWidget {
-  const _Swatch({required this.color, required this.selected, required this.onTap});
+  const _Swatch({
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
 
   final Color color;
   final bool selected;

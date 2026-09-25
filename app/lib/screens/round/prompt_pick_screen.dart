@@ -10,6 +10,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/loading_view.dart';
 
 /// Design.md §5 "Prompt pick": three cards, selection state, no-reroll
 /// stated on screen.
@@ -92,9 +93,11 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
               );
             }
             if (!snapshot.hasData) {
-              return const Center(
-                child: CircularProgressIndicator(color: AppColors.ink),
-              );
+              // A first-time pick is a few sequential Firestore round
+              // trips even after PromptService's pool cache (see
+              // RoomService.setIssuedPromptIds) — worth naming, not just
+              // a silent spinner.
+              return const LoadingView(message: 'Getting your prompts ready…');
             }
             final prompts = snapshot.data!;
             if (prompts.isEmpty) {

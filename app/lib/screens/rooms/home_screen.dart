@@ -12,6 +12,7 @@ import '../../utils/dashed_path.dart';
 import '../../utils/initials.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_chip.dart';
+import '../../widgets/loading_view.dart';
 import 'join_room_sheet.dart';
 
 /// Reads the signed-in user's rooms live from Firestore — every room the
@@ -85,15 +86,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       );
                     }
                     if (!snapshot.hasData) {
-                      return const Center(
-                        child: Padding(
-                          padding: EdgeInsets.symmetric(
-                            vertical: AppSpacing.xl,
-                          ),
-                          child: CircularProgressIndicator(
-                            color: AppColors.ink,
-                          ),
-                        ),
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+                        child: LoadingView(),
                       );
                     }
                     final rooms = snapshot.data!;
