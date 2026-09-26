@@ -11,6 +11,7 @@ class RoomDetail {
     required this.ownerUid,
     required this.ownerDisplayName,
     required this.memberCount,
+    required this.memberUids,
     required this.memberPreview,
     required this.canvasSize,
     required this.roundLengthHours,
@@ -23,6 +24,12 @@ class RoomDetail {
   final String ownerUid;
   final String ownerDisplayName;
   final int memberCount;
+
+  /// In join order, owner first.
+  final List<String> memberUids;
+
+  /// Initials copied at join time — only a fallback now; avatars render
+  /// from each player's live profile via [memberUids].
   final List<String> memberPreview;
   final int canvasSize;
   final int roundLengthHours;
@@ -52,6 +59,7 @@ class RoomDetail {
       ownerUid: (data['ownerUid'] as String?) ?? '',
       ownerDisplayName: (data['ownerDisplayName'] as String?) ?? 'the host',
       memberCount: (data['memberCount'] as num?)?.toInt() ?? 1,
+      memberUids: List<String>.from(data['memberUids'] as List? ?? const []),
       memberPreview: List<String>.from(
         data['memberPreview'] as List? ?? const [],
       ),

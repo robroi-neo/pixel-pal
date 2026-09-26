@@ -21,6 +21,7 @@ class RoomSummary {
     required this.status,
     required this.isOwner,
     required this.memberCount,
+    this.memberUids = const [],
     this.timeLabel,
     this.members = const [],
     this.overflowCount,
@@ -49,6 +50,10 @@ class RoomSummary {
   final bool isOwner;
 
   final int memberCount;
+
+  /// In join order, owner first. Avatars render from these (via each
+  /// player's live profile); [members] is only the fallback initials.
+  final List<String> memberUids;
 
   /// e.g. "18h left" — null until the round engine exists to produce one.
   final String? timeLabel;
@@ -87,6 +92,7 @@ class RoomSummary {
       status: RoomStatus.waiting,
       isOwner: data['ownerUid'] == currentUid,
       memberCount: memberCount,
+      memberUids: List<String>.from(data['memberUids'] as List? ?? const []),
       members: preview,
       overflowCount: overflow > 0 ? overflow : null,
       roundEndsAt: roundEndsAt,

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Color;
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -10,6 +11,8 @@ import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
 import '../screens/guess/guess_screen.dart';
+import '../screens/profile/icon_editor_screen.dart';
+import '../screens/profile/profile_screen.dart';
 import '../screens/rooms/create_room_screen.dart';
 import '../screens/rooms/home_screen.dart';
 import '../screens/rooms/room_created_screen.dart';
@@ -56,6 +59,11 @@ class AppRoutes {
 
   /// `/rooms/:roomId/guess` — Design.md §5 "Guess".
   static const guess = '/rooms/:roomId/guess';
+
+  static const profile = '/profile';
+
+  /// The current icon (nullable `List<Color>`) travels via `extra`.
+  static const profileIcon = '/profile/icon';
 }
 
 /// Dev-only escape hatch: when true, the auth gate below treats every user
@@ -144,6 +152,15 @@ GoRouter buildAppRouter(AuthService authService) {
         path: AppRoutes.guess,
         builder: (context, state) =>
             GuessScreen(roomId: state.pathParameters['roomId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.profile,
+        builder: (context, state) => const ProfileScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.profileIcon,
+        builder: (context, state) =>
+            IconEditorScreen(initialIcon: state.extra as List<Color>?),
       ),
     ],
   );

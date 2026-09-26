@@ -37,6 +37,38 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // The public half of a user — display name and 16x16 pixel icon — kept
+    // apart from users/{uid} so the email there stays owner-only. Readable
+    // by any signed-in user: rooms, drawings and avatars render names and
+    // icons from here by uid, so a rename reaches every room and every
+    // drawing already made. Written by the client itself (Spark, see
+    // services/profile_service.dart); you can only write your own.
+    //
+    // The app enforces a 3-16 character name; rules allow 1-16 so an
+    // account whose sign-in name is 1-2 characters can still get a profile
+    // created for it. iconPixels is PixelCodec's base64 (a 16x16 icon is
+    // 344 chars); only its size is bounded here, and the client treats
+    // anything that doesn't decode to 16x16 as "no icon". It may be
+    // absent — "go back to my initial" deletes the field.
+    match /profiles/{uid} {
+      allow read: if request.auth != null;
+
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.keys()
+            .hasOnly(['displayName', 'iconPixels', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 16
+        && (!('iconPixels' in request.resource.data)
+            || (request.resource.data.iconPixels is string
+                && request.resource.data.iconPixels.size() > 0
+                && request.resource.data.iconPixels.size() <= 400))
+        && request.resource.data.updatedAt == request.time;
+
+      allow delete: if false;
+    }
+
     // Invite-code -> roomId lookup, created by the client alongside
     // rooms/{roomId} (see services/room_service.dart). Without a Cloud
     // Function to do this transactionally server-side, a malicious

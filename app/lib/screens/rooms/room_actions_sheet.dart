@@ -1,11 +1,12 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/room_summary.dart';
 import '../../services/drawing_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
-import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/profile_avatar.dart';
 
 enum RoomAction { copyCode, delete, leave }
 
@@ -229,9 +230,11 @@ class _DeleteRoomDialogState extends State<DeleteRoomDialog> {
     final theme = Theme.of(context);
     final textTheme = theme.textTheme;
     final danger = theme.colorScheme.error;
-    // memberPreview starts as [owner] and joiners are appended; the owner
-    // never leaves, so everything after the first entry is someone else.
-    final others = widget.room.members.skip(1).toList();
+    final myUid = FirebaseAuth.instance.currentUser?.uid;
+    final others = widget.room.memberUids
+        .where((uid) => uid != myUid)
+        .take(4)
+        .toList();
     final otherCount = widget.room.memberCount - 1;
 
     return Dialog(
@@ -278,8 +281,9 @@ class _DeleteRoomDialogState extends State<DeleteRoomDialog> {
                     for (var i = 0; i < others.length; i++)
                       Align(
                         widthFactor: i == others.length - 1 ? 1 : 0.75,
-                        child: AppAvatar(
-                          initials: others[i],
+                        child: ProfileAvatar(
+                          uid: others[i],
+                          fallbackInitials: '?',
                           size: 32,
                           ringColor: AppColors.white,
                         ),

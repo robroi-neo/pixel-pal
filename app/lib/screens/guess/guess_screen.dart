@@ -7,12 +7,11 @@ import '../../services/drawing_service.dart';
 import '../../services/guess_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
-import '../../utils/initials.dart';
-import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_chip.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/pixel_canvas.dart';
+import '../../widgets/profile_avatar.dart';
 
 /// Design.md §5 "Guess": letter tiles, attempt markers, fuzzy submit.
 /// Drawer avatar and difficulty above the art; category chip, attempt
@@ -239,15 +238,22 @@ class _GuessBody extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           Row(
             children: [
-              AppAvatar(
-                initials: initialsFor(drawing.authorDisplayName),
+              // The artist's current name/icon, not the copy stamped on
+              // the drawing at submit time — a rename reaches old drawings.
+              ProfileAvatar(
+                uid: drawing.authorUid,
+                fallbackName: drawing.authorDisplayName,
                 size: 32,
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text(
-                  '${drawing.authorDisplayName} drew this',
-                  style: textTheme.bodyMedium,
+                child: ProfileBuilder(
+                  uid: drawing.authorUid,
+                  builder: (context, author) => Text(
+                    '${author?.displayName ?? drawing.authorDisplayName} '
+                    'drew this',
+                    style: textTheme.bodyMedium,
+                  ),
                 ),
               ),
               AttentionChip(drawing.difficulty.label),

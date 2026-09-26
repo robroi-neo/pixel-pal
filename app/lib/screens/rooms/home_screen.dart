@@ -4,16 +4,17 @@ import 'package:go_router/go_router.dart';
 import '../../models/room_summary.dart';
 import '../../router/app_router.dart';
 import '../../services/auth_service.dart';
+import '../../services/profile_service.dart';
 import '../../services/room_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
 import '../../utils/clipboard.dart';
 import '../../utils/dashed_path.dart';
-import '../../utils/initials.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_chip.dart';
 import '../../widgets/loading_view.dart';
+import '../../widgets/profile_avatar.dart';
 import 'join_room_sheet.dart';
 import 'room_actions_sheet.dart';
 
@@ -35,6 +36,18 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<String> _pendingDeleteIds = {};
 
   @override
+  void initState() {
+    super.initState();
+    // Backfills profiles/{uid} for accounts made before profiles existed,
+    // so other players see this user's live name/icon rather than the
+    // copies on old rooms. Idempotent; a failure just means the fallback
+    // copies keep showing until next time.
+    if (AuthService().currentUser != null) {
+      ProfileService().ensureOwnProfile().ignore();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final user = AuthService().currentUser;
     final textTheme = Theme.of(context).textTheme;
@@ -53,16 +66,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text('Your rooms', style: textTheme.headlineMedium),
                   ),
                   const SizedBox(width: AppSpacing.sm),
-                  GestureDetector(
-                    // Sign out has no visible affordance in the mockup —
-                    // a long-press keeps it reachable for dev/testing
-                    // without adding UI the design doesn't call for.
-                    onLongPress: () => AuthService().signOut(),
-                    child: AppAvatar(
-                      initials: initialsFor(user?.displayName),
-                      size: 40,
+                  // The avatar is the whole control: 48px clears the 44px
+                  // floor on its own, and a header-corner avatar already
+                  // reads as "you". Sign-out lives on the profile screen.
+                  if (user == null)
+                    const AppAvatar(initials: '?', size: 48)
+                  else
+                    Semantics(
+                      button: true,
+                      label: 'Your profile',
+                      child: GestureDetector(
+                        onTap: () => context.push(AppRoutes.profile),
+                        child: ProfileAvatar(
+                          uid: user.uid,
+                          fallbackName: user.displayName,
+                          size: 48,
+                        ),
+                      ),
                     ),
-                  ),
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
@@ -409,11 +430,7 @@ class _RoomCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.md),
                 Row(
                   children: [
-                    _AvatarStack(
-                      members: room.members,
-                      overflowCount: room.overflowCount,
-                      ringColor: background,
-                    ),
+                    _AvatarStack(room: room, ringColor: background),
                     const Spacer(),
                     if (room.footer != null)
                       Text(
@@ -434,34 +451,46 @@ class _RoomCard extends StatelessWidget {
 }
 
 class _AvatarStack extends StatelessWidget {
-  const _AvatarStack({
-    required this.members,
-    required this.ringColor,
-    this.overflowCount,
-  });
+  const _AvatarStack({required this.room, required this.ringColor});
 
-  final List<String> members;
-  final int? overflowCount;
+  final RoomSummary room;
   final Color ringColor;
 
+  static const _maxShown = 4;
   static const _avatarSize = 28.0;
   static const _overlap = 10.0;
 
   @override
   Widget build(BuildContext context) {
-    final items = [...members, if (overflowCount != null) '+$overflowCount'];
-    if (items.isEmpty) return const SizedBox.shrink();
+    final uids = room.memberUids.take(_maxShown).toList();
+    final overflow = room.memberCount - uids.length;
+    final count = uids.length + (overflow > 0 ? 1 : 0);
+    if (count == 0) return const SizedBox.shrink();
 
     return SizedBox(
       height: _avatarSize,
-      width: _avatarSize + (items.length - 1) * (_avatarSize - _overlap),
+      width: _avatarSize + (count - 1) * (_avatarSize - _overlap),
       child: Stack(
         children: [
-          for (var i = 0; i < items.length; i++)
+          for (var i = 0; i < uids.length; i++)
             Positioned(
               left: i * (_avatarSize - _overlap),
+              child: ProfileAvatar(
+                uid: uids[i],
+                // memberPreview was appended in the same join order, so
+                // it lines up for players who have no profile doc yet.
+                fallbackInitials: i < room.members.length
+                    ? room.members[i]
+                    : '?',
+                size: _avatarSize,
+                ringColor: ringColor,
+              ),
+            ),
+          if (overflow > 0)
+            Positioned(
+              left: uids.length * (_avatarSize - _overlap),
               child: AppAvatar(
-                initials: items[i],
+                initials: '+$overflow',
                 size: _avatarSize,
                 ringColor: ringColor,
               ),

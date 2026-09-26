@@ -9,9 +9,9 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../utils/clipboard.dart';
 import '../../utils/dashed_path.dart';
-import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/loading_view.dart';
+import '../../widgets/profile_avatar.dart';
 
 /// The room's lobby — reached by tapping a room that hasn't started its
 /// round yet (any member, not just the owner: everyone waits here until
@@ -203,6 +203,7 @@ class _RoomBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final emptySlots = (_slotCount - room.memberCount).clamp(0, _slotCount);
+    final shownUids = room.memberUids.take(_slotCount).toList();
     final started = room.isRoundStarted;
 
     return SingleChildScrollView(
@@ -219,19 +220,31 @@ class _RoomBody extends StatelessWidget {
             style: textTheme.headlineMedium,
           ),
           const SizedBox(height: AppSpacing.xs),
-          Text(
-            started
-                ? 'Share the code below to bring in more players.'
-                : isOwner
-                ? "Start whenever you're ready — solo is fine too."
-                : 'Waiting for ${room.ownerDisplayName} to start round 1.',
-            style: textTheme.bodyMedium,
+          ProfileBuilder(
+            uid: room.ownerUid,
+            builder: (context, owner) => Text(
+              started
+                  ? 'Share the code below to bring in more players.'
+                  : isOwner
+                  ? "Start whenever you're ready — solo is fine too."
+                  : 'Waiting for ${owner?.displayName ?? room.ownerDisplayName} '
+                        'to start round 1.',
+              style: textTheme.bodyMedium,
+            ),
           ),
           const SizedBox(height: AppSpacing.lg),
           Row(
             children: [
-              for (final initials in room.memberPreview) ...[
-                AppAvatar(initials: initials, size: 40),
+              for (var i = 0; i < shownUids.length; i++) ...[
+                ProfileAvatar(
+                  uid: shownUids[i],
+                  // Same join order as memberUids — only used until that
+                  // player has a profile doc.
+                  fallbackInitials: i < room.memberPreview.length
+                      ? room.memberPreview[i]
+                      : '?',
+                  size: 40,
+                ),
                 const SizedBox(width: AppSpacing.sm),
               ],
               for (var i = 0; i < emptySlots; i++) ...[
@@ -310,12 +323,16 @@ class _RoomBody extends StatelessWidget {
               )
             else
               Center(
-                child: Text(
-                  'Waiting for ${room.ownerDisplayName} to start the round…',
-                  style: textTheme.bodySmall?.copyWith(
-                    color: AppColors.ink.withValues(alpha: 0.6),
+                child: ProfileBuilder(
+                  uid: room.ownerUid,
+                  builder: (context, owner) => Text(
+                    'Waiting for ${owner?.displayName ?? room.ownerDisplayName} '
+                    'to start the round…',
+                    style: textTheme.bodySmall?.copyWith(
+                      color: AppColors.ink.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                  textAlign: TextAlign.center,
                 ),
               ),
           ],
