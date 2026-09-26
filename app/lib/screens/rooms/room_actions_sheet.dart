@@ -6,6 +6,7 @@ import '../../services/drawing_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/profile_avatar.dart';
 
 enum RoomAction { copyCode, delete, leave }
@@ -21,9 +22,8 @@ class RoomActionsSheet extends StatelessWidget {
   final RoomSummary room;
 
   static Future<RoomAction?> show(BuildContext context, RoomSummary room) {
-    return showModalBottomSheet<RoomAction>(
-      context: context,
-      backgroundColor: Colors.transparent,
+    return AppSheet.show<RoomAction>(
+      context,
       builder: (_) => RoomActionsSheet(room: room),
     );
   }
@@ -33,86 +33,59 @@ class RoomActionsSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final danger = theme.colorScheme.error;
 
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.lg),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.md,
-            AppSpacing.lg,
-            AppSpacing.sm,
+    return AppSheet(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            room.title,
+            style: theme.textTheme.titleLarge,
+            overflow: TextOverflow.ellipsis,
           ),
-          decoration: BoxDecoration(
-            color: AppColors.cream,
-            borderRadius: AppRadius.cardRadius,
-            border: Border.all(color: AppColors.ink, width: AppBorders.thick),
+          const SizedBox(height: AppSpacing.md),
+          // No share-sheet package in the app yet, so this copies rather
+          // than claiming to "share".
+          _ActionRow(
+            icon: Icons.copy_outlined,
+            label: 'Copy the invite code',
+            onTap: () => Navigator.of(context).pop(RoomAction.copyCode),
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 48,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: AppColors.ink.withValues(alpha: 0.2),
-                    borderRadius: AppRadius.chipRadius,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text(
-                room.title,
-                style: theme.textTheme.titleLarge,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: AppSpacing.md),
-              // No share-sheet package in the app yet, so this copies
-              // rather than claiming to "share".
-              _ActionRow(
-                icon: Icons.copy_outlined,
-                label: 'Copy the invite code',
-                onTap: () => Navigator.of(context).pop(RoomAction.copyCode),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              Container(
-                height: 3,
-                decoration: BoxDecoration(
-                  color: AppColors.ink.withValues(alpha: 0.1),
-                  borderRadius: AppRadius.chipRadius,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.md),
-              if (room.isOwner)
-                _ActionRow(
-                  icon: Icons.delete_outline,
-                  label: 'Delete this room',
-                  detail: room.isRoundStarted
-                      ? 'Everyone in it loses what they played'
-                      : 'Nothing has been played yet',
-                  color: danger,
-                  onTap: () => Navigator.of(context).pop(RoomAction.delete),
-                )
-              else
-                _ActionRow(
-                  icon: Icons.logout_rounded,
-                  label: 'Leave room',
-                  detail: 'Rejoin any time with the invite code',
-                  color: danger,
-                  onTap: () => Navigator.of(context).pop(RoomAction.leave),
-                ),
-              const SizedBox(height: AppSpacing.sm),
-              Center(
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
-                ),
-              ),
-            ],
+          const SizedBox(height: AppSpacing.md),
+          Container(
+            height: 3,
+            decoration: BoxDecoration(
+              color: AppColors.ink.withValues(alpha: 0.1),
+              borderRadius: AppRadius.chipRadius,
+            ),
           ),
-        ),
+          const SizedBox(height: AppSpacing.md),
+          if (room.isOwner)
+            _ActionRow(
+              icon: Icons.delete_outline,
+              label: 'Delete this room',
+              detail: room.isRoundStarted
+                  ? 'Everyone in it loses what they played'
+                  : 'Nothing has been played yet',
+              color: danger,
+              onTap: () => Navigator.of(context).pop(RoomAction.delete),
+            )
+          else
+            _ActionRow(
+              icon: Icons.logout_rounded,
+              label: 'Leave room',
+              detail: 'Rejoin any time with the invite code',
+              color: danger,
+              onTap: () => Navigator.of(context).pop(RoomAction.leave),
+            ),
+          const SizedBox(height: AppSpacing.sm),
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 /// An interactive pixel grid — Design.md §5 "Draw / editor". Pure
@@ -28,15 +29,15 @@ class PixelCanvas extends StatefulWidget {
   /// Flat, row-major, length `canvasSize * canvasSize`.
   final List<Color> pixels;
 
-  /// Fired once when a drag or tap begins, before any cell callback —
-  /// the screen should snapshot undo history here.
+  /// Fired once when a touch lands, before any cell callback — the
+  /// screen should snapshot undo history here.
   final VoidCallback onStrokeStart;
 
-  /// Fired for every cell touched during a drag (including interpolated
-  /// cells between two points), and once for a plain tap.
+  /// Fired for the cell a touch lands on, then every cell it drags over
+  /// (including interpolated cells between two points).
   final ValueChanged<int> onPaintCell;
 
-  /// Fired once for a clean tap (not a drag) — the fill tool's signal,
+  /// Fired once, for the cell a touch lands on — the fill tool's signal,
   /// distinct from [onPaintCell] so a tool that only makes sense as a
   /// single action (fill) doesn't have to ignore a stream of drag calls.
   final ValueChanged<int> onTapCell;
@@ -52,7 +53,10 @@ class _PixelCanvasState extends State<PixelCanvas> {
     final cellExtent = size.width / widget.canvasSize;
     final col = (local.dx / cellExtent).floor();
     final row = (local.dy / cellExtent).floor();
-    if (col < 0 || col >= widget.canvasSize || row < 0 || row >= widget.canvasSize) {
+    if (col < 0 ||
+        col >= widget.canvasSize ||
+        row < 0 ||
+        row >= widget.canvasSize) {
       return null;
     }
     return row * widget.canvasSize + col;
@@ -93,34 +97,43 @@ class _PixelCanvasState extends State<PixelCanvas> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        return GestureDetector(
-          onPanStart: (details) {
-            final cell = _cellAt(details.localPosition, size);
-            if (cell == null) return;
-            widget.onStrokeStart();
-            widget.onPaintCell(cell);
-            _lastCell = cell;
-          },
-          onPanUpdate: (details) {
-            final cell = _cellAt(details.localPosition, size);
-            if (cell == null) return;
-            if (_lastCell != null && _lastCell != cell) {
-              _paintLine(_lastCell!, cell);
-            } else {
-              widget.onPaintCell(cell);
-            }
-            _lastCell = cell;
-          },
-          onPanEnd: (_) => _lastCell = null,
-          // Not calling onStrokeStart here too: onPanStart above already
-          // fires for every touch-down, taps included (a pan recognizer
-          // accepts immediately, before it's known whether the pointer
-          // will move) — calling it again here would double-fire it for
-          // the same gesture.
-          onTapUp: (details) {
-            final cell = _cellAt(details.localPosition, size);
-            if (cell == null) return;
-            widget.onTapCell(cell);
+        // One eager drag recognizer rather than GestureDetector's tap +
+        // pan: a plain pan only wins once the finger moves past its slop,
+        // so a still tap went to the tap recognizer and never painted,
+        // and a mostly-vertical stroke lost to the enclosing scroll view.
+        return RawGestureDetector(
+          gestures: {
+            _EagerPanGestureRecognizer:
+                GestureRecognizerFactoryWithHandlers<
+                  _EagerPanGestureRecognizer
+                >(
+                  _EagerPanGestureRecognizer.new,
+                  (recognizer) => recognizer
+                    ..onStart = (details) {
+                      final cell = _cellAt(details.localPosition, size);
+                      if (cell == null) return;
+                      widget.onStrokeStart();
+                      widget.onPaintCell(cell);
+                      widget.onTapCell(cell);
+                      _lastCell = cell;
+                    }
+                    ..onUpdate = (details) {
+                      final cell = _cellAt(details.localPosition, size);
+                      if (cell == null) return;
+                      if (_lastCell != null && _lastCell != cell) {
+                        _paintLine(_lastCell!, cell);
+                      } else {
+                        widget.onPaintCell(cell);
+                      }
+                      _lastCell = cell;
+                    }
+                    ..onEnd = (_) {
+                      _lastCell = null;
+                    }
+                    ..onCancel = () {
+                      _lastCell = null;
+                    },
+                ),
           },
           child: CustomPaint(
             size: size,
@@ -135,17 +148,33 @@ class _PixelCanvasState extends State<PixelCanvas> {
   }
 }
 
+/// Claims the pointer the moment it lands, so every touch on the canvas
+/// — a tap included — is a stroke, and nothing else can take it.
+class _EagerPanGestureRecognizer extends PanGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
+  }
+}
+
 /// A static, non-interactive render of the same pixel data — the
 /// gallery-size thumbnail preview.
 class PixelPreview extends StatelessWidget {
-  const PixelPreview({super.key, required this.canvasSize, required this.pixels});
+  const PixelPreview({
+    super.key,
+    required this.canvasSize,
+    required this.pixels,
+  });
 
   final int canvasSize;
   final List<Color> pixels;
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(painter: PixelPainter(canvasSize: canvasSize, pixels: pixels));
+    return CustomPaint(
+      painter: PixelPainter(canvasSize: canvasSize, pixels: pixels),
+    );
   }
 }
 
@@ -163,7 +192,12 @@ class PixelPainter extends CustomPainter {
       for (var col = 0; col < canvasSize; col++) {
         paint.color = pixels[row * canvasSize + col];
         canvas.drawRect(
-          Rect.fromLTWH(col * cellExtent, row * cellExtent, cellExtent, cellExtent),
+          Rect.fromLTWH(
+            col * cellExtent,
+            row * cellExtent,
+            cellExtent,
+            cellExtent,
+          ),
           paint,
         );
       }

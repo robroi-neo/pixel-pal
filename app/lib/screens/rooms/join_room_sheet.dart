@@ -11,6 +11,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/app_sheet.dart';
 
 /// The "join a room" bottom sheet reached from the room list's "New room
 /// or join code" button. Design.md marks create/join room as not designed
@@ -25,10 +26,8 @@ class JoinRoomSheet extends StatefulWidget {
   const JoinRoomSheet({super.key});
 
   static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+    return AppSheet.show<void>(
+      context,
       builder: (context) => const JoinRoomSheet(),
     );
   }
@@ -102,79 +101,41 @@ class _JoinRoomSheetState extends State<JoinRoomSheet> {
   Widget build(BuildContext context) {
     final result = _result;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          // A non-uniform Border (e.g. omitting the bottom side, which sits
-          // off-screen anyway) throws — BoxDecoration only allows
-          // borderRadius together with a uniform border on all four sides.
-          border: Border.all(color: AppColors.ink, width: AppBorders.thick),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.sm,
-              AppSpacing.lg,
-              AppSpacing.lg,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: AppColors.ink.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => context.pop(),
-                  ),
-                ),
-                switch (result) {
-                  RoomLookupJoinable(:final preview) => _JoinablePanel(
-                    code: _code,
-                    preview: preview,
-                    onJoin: _confirmJoin,
-                    onTryDifferentCode: _tryDifferentCode,
-                  ),
-                  RoomLookupFull(:final preview) => _FullPanel(
-                    preview: preview,
-                    onTryDifferentCode: _tryDifferentCode,
-                  ),
-                  RoomLookupAlreadyMember(:final preview) => _AlreadyMemberPanel(
-                    preview: preview,
-                    onGoToRoom: () => _goToRoom(preview.roomId),
-                  ),
-                  RoomLookupNotFound() || null => _EnteringPanel(
-                    key: ValueKey(_resetTick),
-                    isError: _isNotFound,
-                    onChanged: (code) => _code = code,
-                    onFindRoom: _findRoom,
-                  ),
-                },
-              ],
+    return AppSheet(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.topRight,
+            child: IconButton(
+              icon: const Icon(Icons.close),
+              onPressed: () => context.pop(),
             ),
           ),
-        ),
+          switch (result) {
+            RoomLookupJoinable(:final preview) => _JoinablePanel(
+              code: _code,
+              preview: preview,
+              onJoin: _confirmJoin,
+              onTryDifferentCode: _tryDifferentCode,
+            ),
+            RoomLookupFull(:final preview) => _FullPanel(
+              preview: preview,
+              onTryDifferentCode: _tryDifferentCode,
+            ),
+            RoomLookupAlreadyMember(:final preview) => _AlreadyMemberPanel(
+              preview: preview,
+              onGoToRoom: () => _goToRoom(preview.roomId),
+            ),
+            RoomLookupNotFound() || null => _EnteringPanel(
+              key: ValueKey(_resetTick),
+              isError: _isNotFound,
+              onChanged: (code) => _code = code,
+              onFindRoom: _findRoom,
+            ),
+          },
+        ],
       ),
     );
   }
@@ -327,7 +288,7 @@ class _FullPanel extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
-            color: AppColors.cream,
+            color: AppColors.white,
             borderRadius: AppRadius.cardRadius,
             border: Border.all(color: AppColors.ink, width: AppBorders.thick),
           ),
@@ -382,7 +343,7 @@ class _AlreadyMemberPanel extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.lg),
           decoration: BoxDecoration(
-            color: AppColors.cream,
+            color: AppColors.white,
             borderRadius: AppRadius.cardRadius,
             border: Border.all(color: AppColors.ink, width: AppBorders.thick),
           ),

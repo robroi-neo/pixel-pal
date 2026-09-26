@@ -12,6 +12,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/app_button.dart';
+import '../../widgets/app_sheet.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/profile_avatar.dart';
 
@@ -554,9 +555,8 @@ class _IconSheet extends StatelessWidget {
     BuildContext context, {
     required bool hasIcon,
   }) {
-    return showModalBottomSheet<_IconAction>(
-      context: context,
-      backgroundColor: Colors.transparent,
+    return AppSheet.show<_IconAction>(
+      context,
       builder: (_) => _IconSheet(hasIcon: hasIcon),
     );
   }
@@ -568,148 +568,126 @@ class _IconSheet extends StatelessWidget {
     final tokens = theme.extension<AppTokens>()!;
     final accent = theme.colorScheme.primary;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.cream,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        border: Border.all(color: AppColors.ink, width: AppBorders.thick),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.md,
-            AppSpacing.lg,
-            AppSpacing.sm,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 48,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: AppColors.ink.withValues(alpha: 0.2),
-                    borderRadius: AppRadius.chipRadius,
-                  ),
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              Text('Your icon', style: textTheme.headlineMedium),
-              const SizedBox(height: AppSpacing.lg),
-              // §4: the shadow marks the thing to act on.
-              Material(
-                color: accent,
+    return AppSheet(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text('Your icon', style: textTheme.headlineMedium),
+          const SizedBox(height: AppSpacing.lg),
+          // §4: the shadow marks the thing to act on. The fill has to be
+          // on the same decoration as the shadow — a BoxShadow paints
+          // under its own decoration's colour, so with the fill on a
+          // Material behind it instead, the ink shadow covered the whole
+          // button. The inner transparent Material keeps the ripple above
+          // the fill.
+          Container(
+            decoration: BoxDecoration(
+              color: accent,
+              borderRadius: AppRadius.controlRadius,
+              border: Border.all(color: AppColors.ink, width: AppBorders.thick),
+              boxShadow: tokens.hardShadow,
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: AppRadius.controlRadius,
+              child: InkWell(
+                onTap: () => Navigator.of(context).pop(_IconAction.draw),
                 borderRadius: AppRadius.controlRadius,
-                child: InkWell(
-                  onTap: () => Navigator.of(context).pop(_IconAction.draw),
-                  borderRadius: AppRadius.controlRadius,
-                  child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    decoration: BoxDecoration(
-                      borderRadius: AppRadius.controlRadius,
-                      border: Border.all(
-                        color: AppColors.ink,
-                        width: AppBorders.thick,
-                      ),
-                      boxShadow: tokens.hardShadow,
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: AppColors.ink,
-                            borderRadius: AppRadius.controlRadius,
-                          ),
-                          child: Icon(Icons.edit_outlined, color: accent),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 48,
+                        height: 48,
+                        decoration: BoxDecoration(
+                          color: AppColors.ink,
+                          borderRadius: AppRadius.controlRadius,
                         ),
-                        const SizedBox(width: AppSpacing.md),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                hasIcon ? 'Redraw it' : 'Draw one',
-                                style: textTheme.titleMedium,
-                              ),
-                              Text(
-                                '${UserProfile.iconSize} × '
-                                '${UserProfile.iconSize}, in the editor you '
-                                'already know',
-                                style: textTheme.bodySmall,
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              if (hasIcon) ...[
-                const SizedBox(height: AppSpacing.lg),
-                Container(
-                  height: 3,
-                  decoration: BoxDecoration(
-                    color: AppColors.ink.withValues(alpha: 0.1),
-                    borderRadius: AppRadius.chipRadius,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                Material(
-                  color: AppColors.cream,
-                  borderRadius: AppRadius.controlRadius,
-                  child: InkWell(
-                    onTap: () => Navigator.of(context).pop(_IconAction.reset),
-                    borderRadius: AppRadius.controlRadius,
-                    child: Container(
-                      constraints: const BoxConstraints(minHeight: 56),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.lg,
-                        vertical: AppSpacing.md,
+                        child: Icon(Icons.edit_outlined, color: accent),
                       ),
-                      decoration: BoxDecoration(
-                        borderRadius: AppRadius.controlRadius,
-                        border: Border.all(
-                          color: AppColors.grey,
-                          width: AppBorders.thick,
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.remove_circle_outline,
-                            color: AppColors.ink.withValues(alpha: 0.75),
-                          ),
-                          const SizedBox(width: AppSpacing.md),
-                          Text(
-                            'Go back to my initial',
-                            style: textTheme.bodyMedium?.copyWith(
-                              fontSize: 16,
-                              color: AppColors.ink.withValues(alpha: 0.75),
+                      const SizedBox(width: AppSpacing.md),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              hasIcon ? 'Redraw it' : 'Draw one',
+                              style: textTheme.titleMedium,
                             ),
-                          ),
-                        ],
+                            Text(
+                              '${UserProfile.iconSize} × '
+                              '${UserProfile.iconSize}, in the editor you '
+                              'already know',
+                              style: textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
-              ],
-              const SizedBox(height: AppSpacing.sm),
-              Center(
-                child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('Cancel'),
+              ),
+            ),
+          ),
+          if (hasIcon) ...[
+            const SizedBox(height: AppSpacing.lg),
+            Container(
+              height: 3,
+              decoration: BoxDecoration(
+                color: AppColors.ink.withValues(alpha: 0.1),
+                borderRadius: AppRadius.chipRadius,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.lg),
+            Material(
+              color: AppColors.cream,
+              borderRadius: AppRadius.controlRadius,
+              child: InkWell(
+                onTap: () => Navigator.of(context).pop(_IconAction.reset),
+                borderRadius: AppRadius.controlRadius,
+                child: Container(
+                  constraints: const BoxConstraints(minHeight: 56),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.lg,
+                    vertical: AppSpacing.md,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.controlRadius,
+                    border: Border.all(
+                      color: AppColors.grey,
+                      width: AppBorders.thick,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.remove_circle_outline,
+                        color: AppColors.ink.withValues(alpha: 0.75),
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      Text(
+                        'Go back to my initial',
+                        style: textTheme.bodyMedium?.copyWith(
+                          fontSize: 16,
+                          color: AppColors.ink.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
+          ],
+          const SizedBox(height: AppSpacing.sm),
+          Center(
+            child: TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
