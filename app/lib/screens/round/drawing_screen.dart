@@ -196,8 +196,8 @@ class _EditorBody extends StatelessWidget {
             previewBuilder: (context, pixels) => Column(
               children: [
                 Container(
-                  width: 44,
-                  height: 44,
+                  width: 64,
+                  height: 64,
                   decoration: BoxDecoration(
                     color: AppColors.canvas,
                     borderRadius: AppRadius.controlRadius,

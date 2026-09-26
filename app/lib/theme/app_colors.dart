@@ -33,7 +33,11 @@ class AppColors {
   static const white = Color(0xFFFFFFFF);
 
   /// Locked. Empty pixel, in every mode, forever — never theme this.
-  static const canvas = Color(0xFFE9E7E0);
+  /// White, the same as the palette's white swatch: an empty pixel and a
+  /// white-painted one look and behave the same (erase, fill, "is the
+  /// canvas empty"). Old drawings store empty as a marker, not a colour,
+  /// so they pick this up too.
+  static const canvas = Color(0xFFFFFFFF);
 
   /// Inactive and vacation avatars only.
   static const grey = Color(0xFF8A8A94);

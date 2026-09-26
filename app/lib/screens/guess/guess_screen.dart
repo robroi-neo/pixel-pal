@@ -280,8 +280,15 @@ class _GuessBody extends StatelessWidget {
               ),
               child: AspectRatio(
                 aspectRatio: 1,
+                // Same faint outline as the editor — white canvas on a
+                // white card.
                 child: Container(
-                  color: AppColors.canvas,
+                  decoration: BoxDecoration(
+                    color: AppColors.canvas,
+                    border: Border.all(
+                      color: AppColors.ink.withValues(alpha: 0.15),
+                    ),
+                  ),
                   child: PixelPreview(
                     canvasSize: drawing.canvasSize,
                     pixels: drawing.pixels,

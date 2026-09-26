@@ -7,6 +7,8 @@ import 'pixel_canvas.dart';
 
 enum PixelTool { pencil, fill, eraser }
 
+const _toolIconSize = AppSizes.iconMax;
+
 /// The pixel editor's state — pixels, tool, colour, and a 20-deep undo
 /// history. Owned by the screen (which needs [pixels] to submit/save),
 /// rendered by [PixelEditor].
@@ -149,8 +151,15 @@ class PixelEditor extends StatelessWidget {
               ),
               child: AspectRatio(
                 aspectRatio: 1,
+                // The canvas is white on a white card — the faint outline
+                // is what shows where the drawable area ends.
                 child: Container(
-                  color: AppColors.canvas,
+                  decoration: BoxDecoration(
+                    color: AppColors.canvas,
+                    border: Border.all(
+                      color: AppColors.ink.withValues(alpha: 0.15),
+                    ),
+                  ),
                   child: PixelCanvas(
                     canvasSize: controller.canvasSize,
                     pixels: controller.pixels,
@@ -164,31 +173,38 @@ class PixelEditor extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.lg),
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            // Tools sit along the bottom edge of the (taller) preview.
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Expanded(
                 child: Row(
                   children: [
                     _ToolButton(
-                      icon: Icons.edit,
+                      icon: (color) =>
+                          Icon(Icons.edit, size: _toolIconSize, color: color),
                       selected: controller.tool == PixelTool.pencil,
                       onTap: () => controller.selectTool(PixelTool.pencil),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     _ToolButton(
-                      icon: Icons.format_color_fill,
+                      icon: (color) => Icon(
+                        Icons.format_color_fill,
+                        size: _toolIconSize,
+                        color: color,
+                      ),
                       selected: controller.tool == PixelTool.fill,
                       onTap: () => controller.selectTool(PixelTool.fill),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     _ToolButton(
-                      icon: Icons.backspace_outlined,
+                      icon: (color) => _EraserIcon(color: color),
                       selected: controller.tool == PixelTool.eraser,
                       onTap: () => controller.selectTool(PixelTool.eraser),
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     _ToolButton(
-                      icon: Icons.undo,
+                      icon: (color) =>
+                          Icon(Icons.undo, size: _toolIconSize, color: color),
                       selected: false,
                       onTap: controller.canUndo ? controller.undo : null,
                     ),
@@ -229,7 +245,9 @@ class PixelEditor extends StatelessWidget {
 class _ToolButton extends StatelessWidget {
   const _ToolButton({required this.icon, required this.selected, this.onTap});
 
-  final IconData icon;
+  /// Built with the state colour (ink, accent when selected, grey when
+  /// disabled) — a builder so a custom-drawn icon gets it too.
+  final Widget Function(Color color) icon;
   final bool selected;
   final VoidCallback? onTap;
 
@@ -254,11 +272,66 @@ class _ToolButton extends StatelessWidget {
             borderRadius: AppRadius.controlRadius,
             border: Border.all(color: AppColors.ink, width: AppBorders.thick),
           ),
-          child: Icon(icon, size: 20, color: iconColor),
+          child: icon(iconColor),
         ),
       ),
     );
   }
+}
+
+/// A block eraser — Material's icon set has none (`backspace` read as a
+/// keyboard key). Drawn on a 24-unit grid as an outlined, tilted block
+/// with its rubber tip marked off and a baseline, at the same 20px and
+/// stroke weight as the other tool icons.
+class _EraserIcon extends StatelessWidget {
+  const _EraserIcon({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomPaint(
+      size: const Size.square(_toolIconSize),
+      painter: _EraserPainter(color),
+    );
+  }
+}
+
+class _EraserPainter extends CustomPainter {
+  const _EraserPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.scale(size.width / 24);
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final body = Path()
+      ..moveTo(7, 21)
+      ..lineTo(2.7, 16.7)
+      ..cubicTo(1.7, 15.7, 1.7, 14.2, 2.7, 13.3)
+      ..lineTo(12.3, 3.7)
+      ..cubicTo(13.3, 2.7, 14.8, 2.7, 15.7, 3.7)
+      ..lineTo(21.3, 9.3)
+      ..cubicTo(22.3, 10.3, 22.3, 11.8, 21.3, 12.7)
+      ..lineTo(13, 21);
+    canvas
+      ..drawPath(body, paint)
+      // Baseline.
+      ..drawLine(const Offset(22, 21), const Offset(7, 21), paint)
+      // Rubber tip.
+      ..drawLine(const Offset(5, 11), const Offset(14, 20), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _EraserPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _Swatch extends StatelessWidget {
