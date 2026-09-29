@@ -16,6 +16,7 @@ class RoomDetail {
     required this.canvasSize,
     required this.roundLengthHours,
     required this.roundEndsAt,
+    this.currentRound,
   });
 
   final String id;
@@ -34,10 +35,14 @@ class RoomDetail {
   final int canvasSize;
   final int roundLengthHours;
 
-  /// Stamped by [RoomService.startRound], not at room creation — a room
-  /// sits in the lobby (null) until the owner explicitly starts round 1.
-  /// Null for rooms created before this field existed.
+  /// The current round's deadline. Stamped when the owner starts round 1
+  /// (a room sits in the lobby, null, until then), and moved on each time
+  /// the room advances to its next round.
   final DateTime? roundEndsAt;
+
+  /// 1, 2, 3, … with no end. Null in the lobby — and for rooms started
+  /// before rounds existed (see [isLegacyRound]).
+  final int? currentRound;
 
   bool isOwnedBy(String uid) => ownerUid == uid;
 
@@ -45,10 +50,36 @@ class RoomDetail {
   /// ([RoomScreen])/hub ([RoundHomeScreen]) split hinges on this.
   bool get isRoundStarted => roundEndsAt != null;
 
-  /// False (never locked) when [roundEndsAt] is unknown — an absent
-  /// deadline isn't the same as a passed one.
+  /// Started before the round engine existed: a deadline but no round
+  /// number, and its data in the old per-room layout. Can't advance.
+  bool get isLegacyRound => roundEndsAt != null && currentRound == null;
+
+  /// The current round's deadline has passed and the next round hasn't
+  /// opened yet — a moment, until someone's app advances the room (see
+  /// `RoundService.checkIn`). False when [roundEndsAt] is unknown.
   bool get isRoundLocked =>
       roundEndsAt != null && DateTime.now().isAfter(roundEndsAt!);
+
+  /// The round whose drawings are up for guessing now — last round's.
+  /// Null in round 1, which is draw-only.
+  int? get guessRound {
+    final n = currentRound;
+    return n != null && n > 1 ? n - 1 : null;
+  }
+
+  /// Round [round]'s drawings can be guessed right now.
+  bool isGuessingOpen(int round) => currentRound == round + 1 && !isRoundLocked;
+
+  /// Round [round]'s guesses are revealed: the round it was guessed in
+  /// has ended.
+  bool isRevealed(int round) =>
+      currentRound != null && currentRound! >= round + 2;
+
+  /// The newest round with results out, or null before round 3.
+  int? get latestResultsRound {
+    final n = currentRound;
+    return n != null && n > 2 ? n - 2 : null;
+  }
 
   factory RoomDetail.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data()!;
@@ -66,6 +97,7 @@ class RoomDetail {
       canvasSize: (data['canvasSize'] as num?)?.toInt() ?? 32,
       roundLengthHours: (data['roundLengthHours'] as num?)?.toInt() ?? 24,
       roundEndsAt: (data['roundEndsAt'] as Timestamp?)?.toDate(),
+      currentRound: (data['currentRound'] as num?)?.toInt(),
     );
   }
 }

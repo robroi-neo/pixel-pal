@@ -13,6 +13,7 @@ import '../../router/app_router.dart';
 import '../../services/drawing_service.dart';
 import '../../services/guess_service.dart';
 import '../../services/room_service.dart';
+import '../../services/round_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
@@ -26,7 +27,8 @@ import '../../widgets/loading_view.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/reveal_chrome.dart';
 
-/// Guessing flow, screens B–D — one drawing per card, in a horizontal
+/// Guessing flow, screens B–D — one of round [GuessScreen.round]'s
+/// drawings per card (guessed during the round after it), in a horizontal
 /// stack you swipe through (or use the arrows / ← →). Opened from the
 /// grid hub ([GuessListScreen]) on the tile you tapped.
 ///
@@ -41,9 +43,17 @@ import '../../widgets/reveal_chrome.dart';
 /// `word` (see [DrawingSubmission]) — there's no Cloud Function on Spark
 /// to check a guess without exposing the answer to *someone*.
 class GuessScreen extends StatefulWidget {
-  const GuessScreen({super.key, required this.roomId, required this.authorUid});
+  const GuessScreen({
+    super.key,
+    required this.roomId,
+    required this.round,
+    required this.authorUid,
+  });
 
   final String roomId;
+
+  /// The round the drawings were made in.
+  final int round;
 
   /// The card to open on — whose drawing it is, also its doc id.
   final String authorUid;
@@ -61,9 +71,9 @@ class _GuessScreenState extends State<GuessScreen> {
 
   late final Stream<RoomDetail?> _room = RoomService().watchRoom(widget.roomId);
   late final Stream<List<DrawingSubmission>> _drawings = DrawingService()
-      .watchOthersDrawings(widget.roomId);
+      .watchOthersDrawings(widget.roomId, widget.round);
   late final Stream<Map<String, GuessProgress>> _myGuesses = _guessService
-      .watchMyGuesses(widget.roomId);
+      .watchMyGuesses(widget.roomId, widget.round);
 
   Timer? _ticker;
   PageController? _pager;
@@ -106,7 +116,9 @@ class _GuessScreenState extends State<GuessScreen> {
     final byUid = {for (final d in drawings) d.authorUid: d};
     final fresh = seededOrder(
       drawings.where((d) => !_order.contains(d.authorUid)),
-      seed: '${FirebaseAuth.instance.currentUser?.uid}:${widget.roomId}',
+      seed:
+          '${FirebaseAuth.instance.currentUser?.uid}:${widget.roomId}:'
+          '${widget.round}',
       idOf: (d) => d.authorUid,
     );
     _order = [
@@ -152,6 +164,7 @@ class _GuessScreenState extends State<GuessScreen> {
     try {
       final outcome = await _guessService.submitGuess(
         roomId: widget.roomId,
+        round: widget.round,
         authorUid: uid,
         answer: drawing.word,
         guessText: text,
@@ -173,6 +186,10 @@ class _GuessScreenState extends State<GuessScreen> {
           _inputFocus.unfocus();
         }
       });
+      if (outcome != GuessOutcome.incorrect) {
+        // Finishing a card might finish the round.
+        unawaited(RoundService().checkIn(widget.roomId));
+      }
     } on GuessServiceException catch (e) {
       if (!mounted) return;
       setState(() => _messages[uid] = e.message);
@@ -189,14 +206,20 @@ class _GuessScreenState extends State<GuessScreen> {
       stream: _room,
       builder: (context, roomSnapshot) {
         final room = roomSnapshot.data;
-        final endsAt = room?.roundEndsAt;
+        // The deadline that matters here is the guessing round's.
+        final endsAt = room?.currentRound == widget.round + 1
+            ? room?.roundEndsAt
+            : null;
         return Scaffold(
           appBar: AppBar(
             leading: IconButton(
               icon: const Icon(Icons.arrow_back_outlined),
               onPressed: () => context.pop(),
             ),
-            title: Text('Guess round 1', style: textTheme.titleMedium),
+            title: Text(
+              'Guess round ${widget.round}',
+              style: textTheme.titleMedium,
+            ),
             actions: [
               if (endsAt != null)
                 Padding(
@@ -258,7 +281,8 @@ class _GuessScreenState extends State<GuessScreen> {
 
     bool isDone(DrawingSubmission d) => guesses[d.authorUid]?.isDone ?? false;
     final left = drawings.where((d) => !isDone(d)).length;
-    final locked = room.isRoundLocked;
+    final locked = !room.isGuessingOpen(widget.round);
+    final revealed = room.isRevealed(widget.round);
     final at = room.roundEndsAt == null ? '' : clockTime(room.roundEndsAt!);
     final typing = _inputFocus.hasFocus;
 
@@ -278,7 +302,9 @@ class _GuessScreenState extends State<GuessScreen> {
               padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
               child: Text(
                 locked
-                    ? 'Guessing is closed · the results are in'
+                    ? revealed
+                          ? 'Guessing is closed · the results are in'
+                          : 'Guessing is closed · results on their way'
                     : left == 0
                     ? 'all $count guessed · results at $at'
                     : '$left of $count drawings left this round',
@@ -353,11 +379,15 @@ class _GuessScreenState extends State<GuessScreen> {
     final uid = drawing.authorUid;
     final progress = guesses[uid] ?? GuessProgress.initial;
     final isCurrent = index == _page;
-    final locked = room.isRoundLocked;
-    final next = _nextUnfinished(drawings, guesses, index);
+    final locked = !room.isGuessingOpen(widget.round);
+    final next = locked ? null : _nextUnfinished(drawings, guesses, index);
 
-    void seeResults() =>
-        context.push(AppRoutes.resultsPath(room.id, startAt: uid));
+    // Only once this round's results are out.
+    final VoidCallback? seeResults = room.isRevealed(widget.round)
+        ? () => context.push(
+            AppRoutes.resultsPath(room.id, widget.round, startAt: uid),
+          )
+        : null;
 
     final card = Padding(
       // Room on the right and bottom for the hard shadow.
@@ -386,7 +416,7 @@ class _GuessScreenState extends State<GuessScreen> {
           drawing: drawing,
           progress: progress,
           locked: locked,
-          endsAt: room.roundEndsAt,
+          endsAt: locked ? null : room.roundEndsAt,
           hasNext: next != null,
           onNext: () =>
               next == null ? context.pop() : _goTo(next, drawings.length),
@@ -543,7 +573,9 @@ class _CardFront extends StatelessWidget {
   final String? message;
   final int shakes;
   final VoidCallback onGuess;
-  final VoidCallback onSeeResults;
+
+  /// Null until this round's results are out.
+  final VoidCallback? onSeeResults;
   final VoidCallback onBackToResult;
 
   @override
@@ -566,15 +598,19 @@ class _CardFront extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Guessing is closed for this round.',
+            onSeeResults == null
+                ? 'Guessing is closed. The results are on their way.'
+                : 'Guessing is closed for this round.',
             textAlign: TextAlign.center,
             style: textTheme.bodyMedium,
           ),
-          const SizedBox(height: AppSpacing.sm),
-          AppButton(
-            label: 'See the results',
-            onPressed: () async => onSeeResults(),
-          ),
+          if (onSeeResults != null) ...[
+            const SizedBox(height: AppSpacing.sm),
+            AppButton(
+              label: 'See the results',
+              onPressed: () async => onSeeResults!(),
+            ),
+          ],
         ],
       );
     } else {
@@ -846,7 +882,9 @@ class _CardBack extends StatelessWidget {
   /// grid.
   final bool hasNext;
   final VoidCallback onNext;
-  final VoidCallback onSeeResults;
+
+  /// Null until this round's results are out.
+  final VoidCallback? onSeeResults;
   final VoidCallback onSeeDrawing;
 
   @override
@@ -944,8 +982,10 @@ class _CardBack extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.md),
             Text(
-              locked
+              onSeeResults != null
                   ? 'The results are in — see who else got it.'
+                  : locked
+                  ? 'Who else got it shows with the results, any moment now.'
                   : 'Who else got it shows with the $at results.',
               textAlign: TextAlign.center,
               style: textTheme.bodySmall?.copyWith(
@@ -953,10 +993,10 @@ class _CardBack extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
-            locked
+            onSeeResults != null
                 ? AccentButton(
                     label: 'See the results',
-                    onPressed: onSeeResults,
+                    onPressed: onSeeResults!,
                   )
                 : AccentButton(
                     label: hasNext ? 'Next drawing' : 'Back to round',

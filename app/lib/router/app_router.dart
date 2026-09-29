@@ -43,40 +43,48 @@ class AppRoutes {
   static const rooms = '/rooms';
   static const roomDetail = '/rooms/:roomId';
 
-  /// `/rooms/:roomId/round` — Design.md §5 "Round home (hub)". Reached by
-  /// non-owners for now; giving the owner this same hub once a room has
-  /// real rounds running is follow-up work.
+  /// `/rooms/:roomId/round` — Design.md §5 "Round home (hub)" for the
+  /// room's current round, whatever number it's on.
   static const roundHome = '/rooms/:roomId/round';
 
-  /// `/rooms/:roomId/prompt-pick` — Design.md §5 "Prompt pick". Room- (and
-  /// member-) scoped now: what a member is offered is persisted to
-  /// `rooms/{roomId}/members/{uid}.issuedPromptIds` so it stays stable
-  /// across visits.
-  static const promptPick = '/rooms/:roomId/prompt-pick';
+  // Everything inside a round carries its number, so a screen keeps
+  // showing the round it was opened for even if the room moves on to the
+  // next one underneath it.
 
-  /// `/rooms/:roomId/draw` — Design.md §5 "Draw / editor". The chosen
-  /// [Prompt] travels via `extra` (it's not URL-safe data, and there's no
-  /// server-side "current prompt" to look up instead).
-  static const draw = '/rooms/:roomId/draw';
+  /// Design.md §5 "Prompt pick", for round `:round`.
+  static const promptPick = '/rooms/:roomId/rounds/:round/prompt-pick';
 
-  /// `/rooms/:roomId/guess` — the grid hub: this round's drawings, in a
-  /// per-player order, with your own progress on each.
-  static const guess = '/rooms/:roomId/guess';
+  /// Design.md §5 "Draw / editor". The chosen [Prompt] travels via
+  /// `extra` (it's not URL-safe data).
+  static const draw = '/rooms/:roomId/rounds/:round/draw';
 
-  /// `/rooms/:roomId/guess/:authorUid` — the swipeable guess cards,
-  /// opened on that drawing.
-  static const guessDrawing = '/rooms/:roomId/guess/:authorUid';
+  /// The grid hub: round `:round`'s drawings (guessed during the round
+  /// after it), in a per-player order, with your own progress on each.
+  static const guess = '/rooms/:roomId/rounds/:round/guess';
 
-  /// `/rooms/:roomId/results` — the deadline reveal, played as a
-  /// sequence. `?drawing=` starts it on that drawing's stage.
-  static const results = '/rooms/:roomId/results';
+  /// The swipeable guess cards, opened on that drawing.
+  static const guessDrawing = '/rooms/:roomId/rounds/:round/guess/:authorUid';
 
-  static String guessDrawingPath(String roomId, String authorUid) =>
-      '$rooms/$roomId/guess/$authorUid';
+  /// Round `:round`'s reveal, played as a sequence. `?drawing=` starts it
+  /// on that drawing's stage.
+  static const results = '/rooms/:roomId/rounds/:round/results';
 
-  static String resultsPath(String roomId, {String? startAt}) => startAt == null
-      ? '$rooms/$roomId/results'
-      : '$rooms/$roomId/results?drawing=$startAt';
+  static String promptPickPath(String roomId, int round) =>
+      '$rooms/$roomId/rounds/$round/prompt-pick';
+
+  static String drawPath(String roomId, int round) =>
+      '$rooms/$roomId/rounds/$round/draw';
+
+  static String guessPath(String roomId, int round) =>
+      '$rooms/$roomId/rounds/$round/guess';
+
+  static String guessDrawingPath(String roomId, int round, String authorUid) =>
+      '$rooms/$roomId/rounds/$round/guess/$authorUid';
+
+  static String resultsPath(String roomId, int round, {String? startAt}) =>
+      startAt == null
+      ? '$rooms/$roomId/rounds/$round/results'
+      : '$rooms/$roomId/rounds/$round/results?drawing=$startAt';
 
   static const profile = '/profile';
 
@@ -156,25 +164,31 @@ GoRouter buildAppRouter(AuthService authService) {
       ),
       GoRoute(
         path: AppRoutes.promptPick,
-        builder: (context, state) =>
-            PromptPickScreen(roomId: state.pathParameters['roomId']!),
+        builder: (context, state) => PromptPickScreen(
+          roomId: state.pathParameters['roomId']!,
+          round: int.parse(state.pathParameters['round']!),
+        ),
       ),
       GoRoute(
         path: AppRoutes.draw,
         builder: (context, state) => DrawingScreen(
           roomId: state.pathParameters['roomId']!,
+          round: int.parse(state.pathParameters['round']!),
           prompt: state.extra! as Prompt,
         ),
       ),
       GoRoute(
         path: AppRoutes.guess,
-        builder: (context, state) =>
-            GuessListScreen(roomId: state.pathParameters['roomId']!),
+        builder: (context, state) => GuessListScreen(
+          roomId: state.pathParameters['roomId']!,
+          round: int.parse(state.pathParameters['round']!),
+        ),
       ),
       GoRoute(
         path: AppRoutes.guessDrawing,
         builder: (context, state) => GuessScreen(
           roomId: state.pathParameters['roomId']!,
+          round: int.parse(state.pathParameters['round']!),
           authorUid: state.pathParameters['authorUid']!,
         ),
       ),
@@ -182,6 +196,7 @@ GoRouter buildAppRouter(AuthService authService) {
         path: AppRoutes.results,
         builder: (context, state) => GuessResultsScreen(
           roomId: state.pathParameters['roomId']!,
+          round: int.parse(state.pathParameters['round']!),
           startAt: state.uri.queryParameters['drawing'],
         ),
       ),

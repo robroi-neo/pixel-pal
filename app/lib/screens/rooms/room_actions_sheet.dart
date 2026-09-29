@@ -2,7 +2,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../models/room_summary.dart';
-import '../../services/drawing_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/app_button.dart';
@@ -182,17 +181,12 @@ class DeleteRoomDialog extends StatefulWidget {
 }
 
 class _DeleteRoomDialogState extends State<DeleteRoomDialog> {
-  late final Future<int> _drawingCount = DrawingService().countDrawings(
-    widget.room.id,
-  );
-
-  String _costText(int? drawings) {
+  String _costText() {
     final players = widget.room.memberCount;
-    // No round engine yet (Implementations.md Phase 3) — a started room
-    // has only ever played round 1.
-    final what = drawings == null
+    final rounds = widget.room.currentRound ?? 1;
+    final what = rounds == 1
         ? '1 round and its drawings'
-        : '1 round and $drawings drawing${drawings == 1 ? '' : 's'}';
+        : '$rounds rounds and all their drawings';
     final whom = players > 1 ? ' for all $players players, not just you' : '';
     return '${what[0].toUpperCase()}${what.substring(1)} disappear$whom. '
         'Nobody can get them back.';
@@ -228,13 +222,10 @@ class _DeleteRoomDialogState extends State<DeleteRoomDialog> {
               style: textTheme.headlineMedium,
             ),
             const SizedBox(height: AppSpacing.md),
-            FutureBuilder<int>(
-              future: _drawingCount,
-              builder: (context, snapshot) => Text(
-                _costText(snapshot.data),
-                style: textTheme.bodyMedium?.copyWith(
-                  color: AppColors.ink.withValues(alpha: 0.75),
-                ),
+            Text(
+              _costText(),
+              style: textTheme.bodyMedium?.copyWith(
+                color: AppColors.ink.withValues(alpha: 0.75),
               ),
             ),
             if (otherCount > 0) ...[

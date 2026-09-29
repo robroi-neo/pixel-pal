@@ -19,7 +19,11 @@ class GuessProgress {
   /// firestore.rules' own cap on the `guesses` subcollection.
   static const maxAttempts = 5;
 
-  static const initial = GuessProgress(attempts: 0, solved: false, revealedCount: 0);
+  static const initial = GuessProgress(
+    attempts: 0,
+    solved: false,
+    revealedCount: 0,
+  );
 
   bool get isOutOfAttempts => !solved && attempts >= maxAttempts;
 

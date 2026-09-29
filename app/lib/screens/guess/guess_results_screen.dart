@@ -5,10 +5,12 @@ import 'package:go_router/go_router.dart';
 import '../../models/drawing_submission.dart';
 import '../../models/guess_progress.dart';
 import '../../models/room_detail.dart';
+import '../../models/round_info.dart';
 import '../../models/round_score.dart';
 import '../../services/drawing_service.dart';
 import '../../services/guess_service.dart';
 import '../../services/room_service.dart';
+import '../../services/round_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
@@ -18,8 +20,9 @@ import '../../widgets/drawing_art.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/reveal_chrome.dart';
 
-/// Guessing flow, screen E — the deadline reveal. Once the round locks,
-/// the group results play as a sequence rather than a table: one stage
+/// Guessing flow, screen E — round [GuessResultsScreen.round]'s reveal.
+/// Once the round its drawings were guessed in has ended, the group
+/// results play as a sequence rather than a table: one stage
 /// per drawing (word, chips, art, drawer, "3 of 4 got it", your star,
 /// everyone's attempts), then your own drawing, then your points.
 /// Design.md §5 "Reveal": chrome goes near-black; the canvas doesn't move.
@@ -27,9 +30,17 @@ import '../../widgets/reveal_chrome.dart';
 /// The leaderboard shift that would end the sequence doesn't exist yet.
 /// Stars are given here and never touch the score.
 class GuessResultsScreen extends StatefulWidget {
-  const GuessResultsScreen({super.key, required this.roomId, this.startAt});
+  const GuessResultsScreen({
+    super.key,
+    required this.roomId,
+    required this.round,
+    this.startAt,
+  });
 
   final String roomId;
+
+  /// The round the drawings were made in.
+  final int round;
 
   /// Author uid of the drawing whose stage to open on.
   final String? startAt;
@@ -42,14 +53,20 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
   final _guessService = GuessService();
   late final Stream<RoomDetail?> _room = RoomService().watchRoom(widget.roomId);
   late final Stream<List<DrawingSubmission>> _drawings = DrawingService()
-      .watchDrawings(widget.roomId);
+      .watchDrawings(widget.roomId, widget.round);
   late final Stream<Set<String>> _stars = _guessService.watchMyStars(
     widget.roomId,
+    widget.round,
   );
+  late final Stream<Map<String, Map<String, GuessProgress>>> _guesses =
+      _guessService.watchAllGuesses(widget.roomId, widget.round);
 
-  // Recreated only when the room's members change.
-  Stream<Map<String, Map<String, GuessProgress>>>? _guesses;
-  String? _guessesKey;
+  /// The round these drawings were guessed in — who it waited for, and
+  /// whether it closed early.
+  late final Stream<RoundInfo?> _guessRound = RoundService().watchRound(
+    widget.roomId,
+    widget.round + 1,
+  );
 
   PageController? _pager;
   int _page = 0;
@@ -59,18 +76,6 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
   void dispose() {
     _pager?.dispose();
     super.dispose();
-  }
-
-  Stream<Map<String, Map<String, GuessProgress>>> _guessesFor(RoomDetail room) {
-    final key = room.memberUids.join(',');
-    if (key != _guessesKey) {
-      _guessesKey = key;
-      _guesses = _guessService.watchAllGuesses(
-        roomId: room.id,
-        guesserUids: room.memberUids,
-      );
-    }
-    return _guesses!;
   }
 
   void _goTo(int page) {
@@ -91,6 +96,7 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
     try {
       await _guessService.setStarred(
         roomId: widget.roomId,
+        round: widget.round,
         authorUid: authorUid,
         starred: starred,
       );
@@ -117,7 +123,7 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
           onPressed: () => context.pop(),
         ),
         title: Text(
-          'Round 1 · results',
+          'Round ${widget.round} · results',
           style: theme.textTheme.titleMedium?.copyWith(color: accent),
         ),
         actions: [
@@ -140,10 +146,10 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
             return StreamBuilder<List<DrawingSubmission>>(
               stream: _drawings,
               builder: (context, drawingsSnapshot) {
-                if (roomSnapshot.hasError || drawingsSnapshot.hasError) {
+                if (roomSnapshot.hasError) {
                   return const _Message("Couldn't load the results.");
                 }
-                if (!roomSnapshot.hasData || !drawingsSnapshot.hasData) {
+                if (!roomSnapshot.hasData) {
                   return Center(
                     child: CircularProgressIndicator(color: accent),
                   );
@@ -152,13 +158,24 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
                 if (room == null) {
                   return const _Message('This room no longer exists.');
                 }
-                if (!room.isRoundLocked) {
+                // Checked before the drawings: until then, other players'
+                // drawings and guesses aren't readable at all.
+                if (!room.isRevealed(widget.round)) {
                   final endsAt = room.roundEndsAt;
                   return _Message(
-                    endsAt == null
-                        ? "The results land once the round's over."
-                        : 'The results land at ${clockTime(endsAt)}. Until '
-                              'then, who got what stays hidden.',
+                    room.currentRound == widget.round + 1 && endsAt != null
+                        ? 'Round ${widget.round} results land at '
+                              '${clockTime(endsAt)}. Until then, who got '
+                              'what stays hidden.'
+                        : "Round ${widget.round} results aren't out yet.",
+                  );
+                }
+                if (drawingsSnapshot.hasError) {
+                  return const _Message("Couldn't load the results.");
+                }
+                if (!drawingsSnapshot.hasData) {
+                  return Center(
+                    child: CircularProgressIndicator(color: accent),
                   );
                 }
                 return StreamBuilder<Set<String>>(
@@ -167,26 +184,31 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
                     return StreamBuilder<
                       Map<String, Map<String, GuessProgress>>
                     >(
-                      stream: _guessesFor(room),
+                      stream: _guesses,
                       builder: (context, guessesSnapshot) {
-                        if (guessesSnapshot.hasError) {
-                          // Most likely this device's clock is a little
-                          // ahead of the server's deadline check.
-                          return const _Message(
-                            "The results aren't open yet — try again in a "
-                            'moment.',
-                          );
-                        }
-                        if (!guessesSnapshot.hasData) {
-                          return Center(
-                            child: CircularProgressIndicator(color: accent),
-                          );
-                        }
-                        return _buildSequence(
-                          room,
-                          drawingsSnapshot.data!,
-                          guessesSnapshot.data!,
-                          starsSnapshot.data ?? const {},
+                        return StreamBuilder<RoundInfo?>(
+                          stream: _guessRound,
+                          builder: (context, roundSnapshot) {
+                            if (guessesSnapshot.hasError) {
+                              return const _Message(
+                                "Couldn't load who got what.",
+                              );
+                            }
+                            if (!guessesSnapshot.hasData ||
+                                !roundSnapshot.hasData &&
+                                    !roundSnapshot.hasError) {
+                              return Center(
+                                child: CircularProgressIndicator(color: accent),
+                              );
+                            }
+                            return _buildSequence(
+                              room,
+                              drawingsSnapshot.data!,
+                              guessesSnapshot.data!,
+                              starsSnapshot.data ?? const {},
+                              roundSnapshot.data,
+                            );
+                          },
                         );
                       },
                     );
@@ -205,19 +227,27 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
     List<DrawingSubmission> drawings,
     Map<String, Map<String, GuessProgress>> guesses,
     Set<String> stars,
+    RoundInfo? guessRound,
   ) {
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
     final others = seededOrder(
       drawings.where((d) => d.authorUid != myUid),
-      seed: '$myUid:${room.id}',
+      seed: '$myUid:${room.id}:${widget.round}',
       idOf: (d) => d.authorUid,
     );
     final mine = drawings.where((d) => d.authorUid == myUid).firstOrNull;
 
-    // You first, then everyone else in join order.
+    // Who could have guessed: everyone the guessing round waited for,
+    // plus anyone who joined since and guessed anyway. You first, then
+    // everyone else in join order.
+    final pool = {...?guessRound?.requiredUids, ...guesses.keys};
+    final order = [...room.memberUids, ...pool];
     List<String> guessersOf(DrawingSubmission d) => [
-      ...room.memberUids.where((uid) => uid == myUid && uid != d.authorUid),
-      ...room.memberUids.where((uid) => uid != myUid && uid != d.authorUid),
+      if (pool.contains(myUid) && myUid != d.authorUid) myUid,
+      ...{
+        for (final uid in order)
+          if (pool.contains(uid) && uid != myUid && uid != d.authorUid) uid,
+      },
     ];
     Map<String, GuessProgress> guessesOn(DrawingSubmission d) => {
       for (final entry in guesses.entries)
@@ -279,6 +309,11 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
 
     return Column(
       children: [
+        if (guessRound?.closedEarly ?? false)
+          const Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
+            child: _EarlyChip(),
+          ),
         Expanded(
           child: PageView(
             controller: pager,
@@ -703,6 +738,31 @@ class _PlayerRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A nice moment, not a warning: the round closed because everyone
+/// finished.
+class _EarlyChip extends StatelessWidget {
+  const _EarlyChip();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.primary,
+        borderRadius: AppRadius.chipRadius,
+      ),
+      child: Text(
+        'Everyone finished early',
+        style: theme.chipTheme.labelStyle?.copyWith(color: AppColors.ink),
       ),
     );
   }

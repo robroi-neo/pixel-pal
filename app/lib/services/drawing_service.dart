@@ -18,13 +18,10 @@ class DrawingServiceException implements Exception {
   String toString() => message;
 }
 
-/// Submits to `rooms/{roomId}/drawings/{uid}` — one drawing per member
-/// per room (Implementations.md's real per-round scoping doesn't exist
-/// yet — Phase 3). firestore.rules makes this genuinely submit-once: a
-/// resubmit is a Firestore `update` (the doc already exists), and the
-/// rules refuse all updates outright, matching Implementations.md's
-/// "submitDrawing() callable, called exactly once" even without a
-/// callable to enforce it.
+/// Submits to `rooms/{roomId}/rounds/{n}/drawings/{uid}` — one drawing
+/// per member per round. firestore.rules makes this genuinely
+/// submit-once (a resubmit is an update, always refused) and only while
+/// round n is current and before its deadline.
 class DrawingService {
   DrawingService({FirebaseFirestore? firestore, FirebaseAuth? auth})
     : _firestore = firestore ?? FirebaseFirestore.instance,
@@ -33,75 +30,54 @@ class DrawingService {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
 
-  DocumentReference<Map<String, dynamic>> _ref(String roomId, String uid) =>
-      _firestore
-          .collection('rooms')
-          .doc(roomId)
-          .collection('drawings')
-          .doc(uid);
+  CollectionReference<Map<String, dynamic>> _drawings(
+    String roomId,
+    int round,
+  ) => _firestore
+      .collection('rooms')
+      .doc(roomId)
+      .collection('rounds')
+      .doc('$round')
+      .collection('drawings');
 
   /// Live — so the editor can notice a drawing already exists (e.g. the
   /// screen was reopened after submitting) without a manual refresh.
-  Stream<bool> watchHasSubmitted(String roomId) {
+  Stream<bool> watchHasSubmitted(String roomId, int round) {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return Stream.value(false);
-    return _ref(roomId, uid).snapshots().map((doc) => doc.exists);
+    return _drawings(
+      roomId,
+      round,
+    ).doc(uid).snapshots().map((doc) => doc.exists);
   }
 
-  /// Every drawing submitted in this room *except* the caller's own — the
-  /// pool the guess screen picks from. Small rooms (max 8 members), so
-  /// reading the whole subcollection and filtering client-side is simpler
-  /// than trying to query around "not mine" in Firestore.
-  Stream<List<DrawingSubmission>> watchOthersDrawings(String roomId) {
+  /// Every drawing from [round] *except* the caller's own — the cards to
+  /// guess. Readable once that round is over (see firestore.rules). Small
+  /// rooms (max 8), so filtering client-side is simplest.
+  Stream<List<DrawingSubmission>> watchOthersDrawings(
+    String roomId,
+    int round,
+  ) {
     final uid = _auth.currentUser?.uid;
-    return _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .collection('drawings')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .where((doc) => doc.id != uid)
-              .map(DrawingSubmission.fromDoc)
-              .toList(),
-        );
-  }
-
-  /// Every drawing in the room, the caller's own included — the guess
-  /// list shows "yours" alongside the ones to guess.
-  Stream<List<DrawingSubmission>> watchDrawings(String roomId) {
-    return _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .collection('drawings')
-        .snapshots()
-        .map(
-          (snapshot) => snapshot.docs.map(DrawingSubmission.fromDoc).toList(),
-        );
-  }
-
-  /// One member's drawing — null if they haven't submitted (or it's gone).
-  Stream<DrawingSubmission?> watchDrawing(String roomId, String authorUid) {
-    return _ref(roomId, authorUid).snapshots().map(
-      (doc) => doc.exists ? DrawingSubmission.fromDoc(doc) : null,
+    return _drawings(roomId, round).snapshots().map(
+      (snapshot) => snapshot.docs
+          .where((doc) => doc.id != uid)
+          .map(DrawingSubmission.fromDoc)
+          .toList(),
     );
   }
 
-  /// How many drawings exist in this room, including the caller's own —
-  /// for naming the cost of deleting it. A server-side count aggregate,
-  /// so it doesn't download the drawings themselves.
-  Future<int> countDrawings(String roomId) async {
-    final snapshot = await _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .collection('drawings')
-        .count()
-        .get();
-    return snapshot.count ?? 0;
+  /// Every drawing from [round], the caller's own included — for the
+  /// reveal.
+  Stream<List<DrawingSubmission>> watchDrawings(String roomId, int round) {
+    return _drawings(roomId, round).snapshots().map(
+      (snapshot) => snapshot.docs.map(DrawingSubmission.fromDoc).toList(),
+    );
   }
 
   Future<void> submitDrawing({
     required String roomId,
+    required int round,
     required Prompt prompt,
     required int canvasSize,
     required List<Color> pixels,
@@ -115,7 +91,7 @@ class DrawingService {
     }
 
     try {
-      await _ref(roomId, user.uid).set({
+      await _drawings(roomId, round).doc(user.uid).set({
         'authorUid': user.uid,
         'authorDisplayName': displayNameOr(user.displayName),
         'promptId': prompt.id,
@@ -130,8 +106,8 @@ class DrawingService {
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') {
         throw DrawingServiceException(
-          "Couldn't submit — you may have already submitted, or you're "
-          "not a member of this room.",
+          "Couldn't submit — this round may have ended, or you've "
+          'already submitted.',
         );
       }
       throw DrawingServiceException(

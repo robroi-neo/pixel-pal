@@ -380,6 +380,8 @@ class _RoomPreviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final memberCount = preview.memberCount;
+    final round = preview.currentRound;
+    final roundLabel = round == null ? 'Not started' : 'Round $round';
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.md),
@@ -400,7 +402,7 @@ class _RoomPreviewCard extends StatelessWidget {
                   children: [
                     Text(preview.name, style: textTheme.titleMedium),
                     Text(
-                      'Round 1 · $memberCount '
+                      '$roundLabel · $memberCount '
                       '${memberCount == 1 ? 'player' : 'players'} · made by '
                       '${preview.ownerDisplayName}',
                       style: textTheme.bodySmall?.copyWith(
@@ -446,7 +448,10 @@ class _NeutralChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final labelStyle = Theme.of(context).chipTheme.labelStyle;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: AppRadius.chipRadius,
@@ -479,7 +484,9 @@ class _CodeDisplay extends StatelessWidget {
       ),
       child: Text(
         code.split('').join(' '),
-        style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontSize: 20),
+        style: Theme.of(
+          context,
+        ).textTheme.headlineMedium?.copyWith(fontSize: 20),
       ),
     );
   }
@@ -499,10 +506,7 @@ class _UpperCaseTextFormatter extends TextInputFormatter {
 /// backspace — the invite code is alphanumeric, not numeric, so this is a
 /// hand-rolled OTP-style input rather than a package built for PIN codes.
 class _InviteCodeInput extends StatefulWidget {
-  const _InviteCodeInput({
-    required this.isError,
-    required this.onChanged,
-  });
+  const _InviteCodeInput({required this.isError, required this.onChanged});
 
   final bool isError;
 

@@ -11,6 +11,7 @@ import '../../router/app_router.dart';
 import '../../services/drawing_service.dart';
 import '../../services/guess_service.dart';
 import '../../services/room_service.dart';
+import '../../services/round_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
@@ -24,19 +25,23 @@ import '../../widgets/loading_view.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/segmented_progress.dart';
 
-/// Guessing flow, screen A — the grid hub. Every other player's drawing
-/// as a numbered tile, in a seeded per-player order; players pick their
+/// Guessing flow, screen A — the grid hub for round [GuessListScreen.round]'s
+/// drawings, guessed during the round after it. Every other player's
+/// drawing as a numbered tile, in a seeded per-player order; players pick their
 /// own order. Tiles show only your own progress, never whether anyone
 /// else has finished, and the drawer's name only once you've finished
 /// that card. A progress bar and "3 of 4 drawings left" are the pace cue,
 /// not a timer.
 ///
-/// Tapping a tile opens [GuessScreen] on it. Once the round locks, the
-/// tiles open the deadline reveal ([GuessResultsScreen]) instead.
+/// Tapping a tile opens [GuessScreen] on it. Once the round's results are
+/// out, the tiles open the reveal ([GuessResultsScreen]) instead.
 class GuessListScreen extends StatefulWidget {
-  const GuessListScreen({super.key, required this.roomId});
+  const GuessListScreen({super.key, required this.roomId, required this.round});
 
   final String roomId;
+
+  /// The round the drawings were made in.
+  final int round;
 
   @override
   State<GuessListScreen> createState() => _GuessListScreenState();
@@ -45,15 +50,17 @@ class GuessListScreen extends StatefulWidget {
 class _GuessListScreenState extends State<GuessListScreen> {
   late final Stream<RoomDetail?> _room = RoomService().watchRoom(widget.roomId);
   late final Stream<List<DrawingSubmission>> _drawings = DrawingService()
-      .watchOthersDrawings(widget.roomId);
+      .watchOthersDrawings(widget.roomId, widget.round);
   late final Stream<Map<String, GuessProgress>> _myGuesses = GuessService()
-      .watchMyGuesses(widget.roomId);
+      .watchMyGuesses(widget.roomId, widget.round);
 
   Timer? _ticker;
 
   @override
   void initState() {
     super.initState();
+    // Catches an early close someone else's app missed.
+    RoundService().checkIn(widget.roomId);
     // Keeps "18h left" fresh and notices the deadline passing.
     _ticker = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
@@ -74,7 +81,10 @@ class _GuessListScreenState extends State<GuessListScreen> {
       stream: _room,
       builder: (context, roomSnapshot) {
         final room = roomSnapshot.data;
-        final endsAt = room?.roundEndsAt;
+        // The deadline that matters here is the guessing round's.
+        final endsAt = room?.currentRound == widget.round + 1
+            ? room?.roundEndsAt
+            : null;
         return Scaffold(
           appBar: AppBar(
             leading: IconButton(
@@ -122,6 +132,7 @@ class _GuessListScreenState extends State<GuessListScreen> {
                     }
                     return _GridBody(
                       room: room,
+                      round: widget.round,
                       drawings: drawingsSnapshot.data!,
                       myGuesses: guessesSnapshot.data!,
                     );
@@ -139,11 +150,13 @@ class _GuessListScreenState extends State<GuessListScreen> {
 class _GridBody extends StatelessWidget {
   const _GridBody({
     required this.room,
+    required this.round,
     required this.drawings,
     required this.myGuesses,
   });
 
   final RoomDetail room;
+  final int round;
   final List<DrawingSubmission> drawings;
   final Map<String, GuessProgress> myGuesses;
 
@@ -151,12 +164,12 @@ class _GridBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
     final myUid = FirebaseAuth.instance.currentUser?.uid ?? '';
-    final locked = room.isRoundLocked;
-    final endsAt = room.roundEndsAt;
+    final open = room.isGuessingOpen(round);
+    final revealed = room.isRevealed(round);
 
     final ordered = seededOrder(
       drawings,
-      seed: '$myUid:${room.id}',
+      seed: '$myUid:${room.id}:$round',
       idOf: (d) => d.authorUid,
     );
     final doneCount = ordered
@@ -165,19 +178,21 @@ class _GridBody extends StatelessWidget {
     final left = ordered.length - doneCount;
 
     void openResults([String? startAt]) =>
-        context.push(AppRoutes.resultsPath(room.id, startAt: startAt));
+        context.push(AppRoutes.resultsPath(room.id, round, startAt: startAt));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.lg),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Guess round 1', style: textTheme.headlineMedium),
+          Text('Guess round $round', style: textTheme.headlineMedium),
           const SizedBox(height: AppSpacing.xs),
           Text(
             ordered.isEmpty
-                ? 'Nobody else has drawn yet — check back soon.'
-                : locked
+                ? 'Nobody else drew in round $round.'
+                : revealed
+                ? 'The results are in'
+                : !open
                 ? 'Guessing is closed'
                 : left == 0
                 ? 'all ${ordered.length} drawings guessed'
@@ -197,11 +212,12 @@ class _GridBody extends StatelessWidget {
                     number: i + 1,
                     drawing: ordered[i],
                     progress: myGuesses[ordered[i].authorUid],
-                    onTap: () => locked
+                    onTap: () => revealed
                         ? openResults(ordered[i].authorUid)
                         : context.push(
                             AppRoutes.guessDrawingPath(
                               room.id,
+                              round,
                               ordered[i].authorUid,
                             ),
                           ),
@@ -209,11 +225,12 @@ class _GridBody extends StatelessWidget {
               ],
             ),
           ],
-          if (locked || (ordered.isNotEmpty && left == 0)) ...[
+          if (!open || (ordered.isNotEmpty && left == 0)) ...[
             const SizedBox(height: AppSpacing.xl),
             _AllInPanel(
-              locked: locked,
-              endsAt: endsAt,
+              open: open,
+              revealed: revealed,
+              endsAt: room.roundEndsAt,
               onSeeResults: openResults,
             ),
           ],
@@ -344,16 +361,19 @@ class _GuessTile extends StatelessWidget {
   }
 }
 
-/// Under the grid once you've guessed everything ("All in") or the round
-/// has locked (the way into the reveal).
+/// Under the grid once you've guessed everything ("All in"), once
+/// guessing has closed, and once the results are out (the way into the
+/// reveal).
 class _AllInPanel extends StatelessWidget {
   const _AllInPanel({
-    required this.locked,
+    required this.open,
+    required this.revealed,
     required this.endsAt,
     required this.onSeeResults,
   });
 
-  final bool locked;
+  final bool open;
+  final bool revealed;
   final DateTime? endsAt;
   final VoidCallback onSeeResults;
 
@@ -369,25 +389,32 @@ class _AllInPanel extends StatelessWidget {
         color: AppColors.cream,
         borderRadius: AppRadius.cardRadius,
         border: Border.all(color: AppColors.ink, width: AppBorders.thick),
-        boxShadow: locked ? tokens.hardShadow : null,
+        boxShadow: revealed ? tokens.hardShadow : null,
       ),
       child: Column(
         children: [
           Text(
-            locked ? 'Results are in' : 'All in',
+            revealed
+                ? 'Results are in'
+                : open
+                ? 'All in'
+                : 'Guessing is closed',
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            locked
+            revealed
                 ? 'See who got each one, and how your round scored.'
-                : 'Who else got each one lands with the results at $at.',
+                : !open
+                ? 'The results are on their way.'
+                : 'Who else got each one lands with the results at $at, '
+                      'or sooner if everyone finishes.',
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: AppColors.ink.withValues(alpha: 0.7),
             ),
           ),
-          if (locked) ...[
+          if (revealed) ...[
             const SizedBox(height: AppSpacing.md),
             AppButton(
               label: 'See the results',

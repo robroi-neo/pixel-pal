@@ -27,6 +27,7 @@ class RoomSummary {
     this.overflowCount,
     this.footer,
     this.roundEndsAt,
+    this.currentRound,
   });
 
   final String id;
@@ -43,6 +44,9 @@ class RoomSummary {
   final DateTime? roundEndsAt;
 
   bool get isRoundStarted => roundEndsAt != null;
+
+  /// 1, 2, 3, … — null in the lobby.
+  final int? currentRound;
 
   /// Whether the current user is `ownerUid` on this room — surfaced as a
   /// mark on the room card, and gates whether tapping it opens the room
@@ -80,6 +84,7 @@ class RoomSummary {
     );
     final overflow = memberCount - preview.length;
     final roundEndsAt = (data['roundEndsAt'] as Timestamp?)?.toDate();
+    final currentRound = (data['currentRound'] as num?)?.toInt();
     final playerWord = 'player${memberCount == 1 ? '' : 's'}';
 
     return RoomSummary(
@@ -88,7 +93,7 @@ class RoomSummary {
       title: (data['name'] as String?) ?? 'Untitled room',
       subtitle: roundEndsAt == null
           ? 'Waiting to start · $memberCount $playerWord'
-          : 'Round 1 · $memberCount $playerWord',
+          : 'Round ${currentRound ?? 1} · $memberCount $playerWord',
       status: RoomStatus.waiting,
       isOwner: data['ownerUid'] == currentUid,
       memberCount: memberCount,
@@ -96,6 +101,7 @@ class RoomSummary {
       members: preview,
       overflowCount: overflow > 0 ? overflow : null,
       roundEndsAt: roundEndsAt,
+      currentRound: currentRound,
     );
   }
 }

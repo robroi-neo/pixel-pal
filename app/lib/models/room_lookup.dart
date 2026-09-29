@@ -1,8 +1,6 @@
 /// What a code resolves to before actually joining — the join sheet shows
 /// this preview and lets the user confirm, rather than joining outright
-/// the moment a code matches. Round tracking doesn't exist yet
-/// (Implementations.md Phase 3), so [subtitle]-style copy elsewhere can't
-/// reference a real round number — only what's actually tracked today.
+/// the moment a code matches.
 class RoomPreview {
   const RoomPreview({
     required this.roomId,
@@ -12,6 +10,7 @@ class RoomPreview {
     required this.memberPreview,
     required this.canvasSize,
     required this.roundLengthHours,
+    this.currentRound,
   });
 
   final String roomId;
@@ -21,6 +20,9 @@ class RoomPreview {
   final List<String> memberPreview;
   final int canvasSize;
   final int roundLengthHours;
+
+  /// Null while the room is still in its lobby.
+  final int? currentRound;
 }
 
 /// What `RoomService.previewRoomByCode` found — a sealed result so the

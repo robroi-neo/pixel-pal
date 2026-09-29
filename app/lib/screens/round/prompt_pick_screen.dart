@@ -16,19 +16,21 @@ import '../../widgets/loading_view.dart';
 /// stated on screen.
 ///
 /// Real word/difficulty/multiplier data (seeded — see
-/// firebase/scripts/seed-prompts.js). The 3 offered are also real and
-/// stable now: the first visit persists them to this member's
-/// `rooms/{roomId}/members/{uid}.issuedPromptIds`, and firestore.rules
-/// refuses to ever change that field once set — so leaving and coming
-/// back shows the same 3, and "no swapping once you start" is an actual
-/// guarantee, not just copy. What's still not real: per-round scoping
-/// (Implementations.md Phase 3 doesn't exist, so there's one persistent
-/// set per member rather than one per round). "Start drawing" opens
-/// [DrawingScreen] with the picked prompt.
+/// firebase/scripts/seed-prompts.js). The 3 offered are stable per round:
+/// the first visit persists them to
+/// `rooms/{roomId}/rounds/{n}/issued/{uid}`, which firestore.rules makes
+/// create-once — so leaving and coming back shows the same 3, and "no
+/// swapping once you start" is an actual guarantee, not just copy.
+/// "Start drawing" opens [DrawingScreen] with the picked prompt.
 class PromptPickScreen extends StatefulWidget {
-  const PromptPickScreen({super.key, required this.roomId});
+  const PromptPickScreen({
+    super.key,
+    required this.roomId,
+    required this.round,
+  });
 
   final String roomId;
+  final int round;
 
   @override
   State<PromptPickScreen> createState() => _PromptPickScreenState();
@@ -43,7 +45,11 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
   Future<List<Prompt>> _loadPrompts() async {
     final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    final issuedIds = await _roomService.getIssuedPromptIds(widget.roomId, uid);
+    final issuedIds = await _roomService.getIssuedPromptIds(
+      widget.roomId,
+      widget.round,
+      uid,
+    );
     if (issuedIds != null && issuedIds.isNotEmpty) {
       return _promptService.getByIds(issuedIds);
     }
@@ -51,6 +57,7 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
     final picked = await _promptService.pickRandom();
     final wonRace = await _roomService.setIssuedPromptIds(
       widget.roomId,
+      widget.round,
       uid,
       picked.map((p) => p.id).toList(),
     );
@@ -61,6 +68,7 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
     // got discarded. Only pay this extra round trip in that rare case.
     final confirmedIds = await _roomService.getIssuedPromptIds(
       widget.roomId,
+      widget.round,
       uid,
     );
     return confirmedIds == null
@@ -78,7 +86,7 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
           icon: const Icon(Icons.arrow_back_outlined),
           onPressed: () => context.pop(),
         ),
-        title: Text('Round 1', style: textTheme.titleMedium),
+        title: Text('Round ${widget.round}', style: textTheme.titleMedium),
       ),
       body: SafeArea(
         child: FutureBuilder<List<Prompt>>(
@@ -138,15 +146,19 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
                         (p) => p.id == _selectedId,
                       );
                       final submitted = await context.push<bool>(
-                        '${AppRoutes.rooms}/${widget.roomId}/draw',
+                        AppRoutes.drawPath(widget.roomId, widget.round),
                         extra: selected,
                       );
-                      // Replace (not push) so Back from guessing returns
-                      // to the hub rather than to this prompt list.
-                      if (submitted == true && context.mounted) {
+                      if (submitted != true || !context.mounted) return;
+                      // On to last round's drawings — replaced (not
+                      // pushed) so Back from guessing returns to the hub.
+                      // Round 1 is draw-only, so straight back to the hub.
+                      if (widget.round > 1) {
                         context.pushReplacement(
-                          '${AppRoutes.rooms}/${widget.roomId}/guess',
+                          AppRoutes.guessPath(widget.roomId, widget.round - 1),
                         );
+                      } else {
+                        context.pop();
                       }
                     },
                   ),

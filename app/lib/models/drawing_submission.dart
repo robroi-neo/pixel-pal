@@ -44,7 +44,9 @@ class DrawingSubmission {
 
   List<Color> get pixels => PixelCodec.decode(packedPixels);
 
-  factory DrawingSubmission.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+  factory DrawingSubmission.fromDoc(
+    DocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
     final data = doc.data() ?? const {};
     return DrawingSubmission(
       authorUid: (data['authorUid'] as String?) ?? '',

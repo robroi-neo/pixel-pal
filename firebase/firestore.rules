@@ -94,9 +94,10 @@ service cloud.firestore {
     // Was "all writes go through createRoom/joinRoom callables"
     // (Implementations.md "Standing rules") — on Spark there's no
     // Cloud Functions to do that, so these rules are the enforcement
-    // instead. `create` pins every field a new room can start with;
-    // `update` allows exactly one shape of change — the caller joining
-    // as a new member — and nothing else about the room may move.
+    // instead. `create` pins every field a new room can start with; each
+    // `update` below allows exactly one shape of change — joining,
+    // starting round 1, advancing to the next round, leaving — and
+    // nothing else about the room may move.
     match /rooms/{roomId} {
       // Any signed-in user, not just members — joinRoom's transaction
       // (services/room_service.dart) has to read a room to check it isn't
@@ -135,6 +136,8 @@ service cloud.firestore {
         && !(request.auth.uid in resource.data.memberUids)
         && resource.data.memberUids.size() < 8
         && request.resource.data.keys().hasOnly(resource.data.keys())
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['memberUids', 'memberCount', 'memberPreview'])
         && request.resource.data.memberUids ==
             resource.data.memberUids.concat([request.auth.uid])
         && request.resource.data.memberCount == resource.data.memberCount + 1
@@ -157,20 +160,64 @@ service cloud.firestore {
             resource.data.get('roundEndsAt', null)
         && request.resource.data.createdAt == resource.data.createdAt;
 
-      // Starting the round (RoomService.startRound): owner-only, and only
-      // from unset — once roundEndsAt exists this can't be satisfied
-      // again, same one-shot pattern as members/{uid}.issuedPromptIds
-      // below. 49h (not 48h) gives an hour of clock-skew slack, since
-      // roundEndsAt is computed from the owner's own device clock (Spark
-      // has no Cloud Function to stamp it authoritatively).
+      // Starting round 1 (RoundService.startFirstRound): owner-only,
+      // one-shot from the lobby — once currentRound exists this can't be
+      // satisfied again. The same transaction creates rounds/1. 49h (not
+      // 48h) gives an hour of clock-skew slack, since roundEndsAt comes
+      // from the owner's own device clock (Spark has no Cloud Function to
+      // stamp it authoritatively).
       allow update: if request.auth != null
         && request.auth.uid == resource.data.ownerUid
         && !('roundEndsAt' in resource.data)
+        && !('currentRound' in resource.data)
         && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['roundEndsAt'])
+            .hasOnly(['roundEndsAt', 'currentRound'])
+        && request.resource.data.currentRound == 1
         && request.resource.data.roundEndsAt is timestamp
         && request.resource.data.roundEndsAt > request.time
-        && request.resource.data.roundEndsAt < request.time + duration.value(49, 'h');
+        && request.resource.data.roundEndsAt < request.time + duration.value(49, 'h')
+        && existsAfter(/databases/$(database)/documents/rooms/$(roomId)/rounds/1);
+
+      // The round engine (RoundService.tryAdvance). There's no scheduler on
+      // Spark, so the next round opens lazily: the first member whose app
+      // checks in after the current round is over moves the room on, in
+      // one transaction that also closes the old round doc and creates the
+      // new one. Over means past the deadline (server time), or everyone
+      // the round waits for is done (early close).
+      //
+      // The next deadline keeps the room's rhythm: always the old one plus
+      // a whole number of round lengths — one after an early close (so
+      // that round runs long, never short), or the first slot still in the
+      // future if nobody opened the room for a while. Round numbers never
+      // skip, so every round's drawings still get a guessing round.
+      function everyoneDone(round) {
+        return round.requiredUids.size() > 0
+          && round.doneUids.hasAll(round.requiredUids);
+      }
+
+      function nextDeadlineOk() {
+        let before = resource.data.roundEndsAt;
+        let after = request.resource.data.roundEndsAt;
+        let step = duration.value(resource.data.roundLengthHours, 'h');
+        let gap = after - before;
+        return after is timestamp
+          && after > request.time
+          && gap.nanos() == 0
+          && gap.seconds() > 0
+          && gap.seconds() % (resource.data.roundLengthHours * 3600) == 0
+          && (after == before + step || after <= request.time + step);
+      }
+
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.memberUids
+        && 'currentRound' in resource.data
+        && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['currentRound', 'roundEndsAt'])
+        && request.resource.data.currentRound == resource.data.currentRound + 1
+        && (request.time > resource.data.roundEndsAt
+            || everyoneDone(get(/databases/$(database)/documents/rooms/$(roomId)/rounds/$(string(resource.data.currentRound))).data))
+        && nextDeadlineOk()
+        && existsAfter(/databases/$(database)/documents/rooms/$(roomId)/rounds/$(string(request.resource.data.currentRound)));
 
       // Leaving (RoomService.leaveRoom): a non-owner member removes only
       // themselves. memberPreview may lose at most one entry — theirs.
@@ -190,10 +237,9 @@ service cloud.firestore {
       allow delete: if request.auth != null
         && resource.data.ownerUid == request.auth.uid;
 
-      // A member can read their own doc — needed for prompt pick to know
-      // what it already issued them (see below). Still not queried by
-      // the room list, which uses the room doc's own denormalized
-      // memberPreview/memberCount instead.
+      // A member can read their own doc. Not queried by the room list,
+      // which uses the room doc's own denormalized memberPreview/
+      // memberCount instead.
       match /members/{uid} {
         allow read: if request.auth != null && request.auth.uid == uid;
 
@@ -205,73 +251,214 @@ service cloud.firestore {
           && request.resource.data.status == 'active'
           && request.resource.data.joinedAt == request.time;
 
-        // The one field a member can ever change on their own doc:
-        // issuedPromptIds, and only from unset to a real value — there's
-        // no real round engine yet (Implementations.md Phase 3) to scope
-        // this per-round, so it's one persistent "current prompts" set
-        // per member. Once it exists, this rule can't be satisfied again
-        // (resource.data already has the key), which is what actually
-        // enforces "no swapping once you start" — the client-side claim
-        // alone wasn't a real guarantee.
-        allow update: if request.auth != null
-          && request.auth.uid == uid
-          && !('issuedPromptIds' in resource.data)
-          && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['issuedPromptIds'])
-          && request.resource.data.issuedPromptIds is list
-          && request.resource.data.issuedPromptIds.size() == 3;
-
         // Leaving — only your own doc, and never the owner's.
         allow delete: if request.auth != null
           && request.auth.uid == uid
           && get(/databases/$(database)/documents/rooms/$(roomId))
               .data.ownerUid != uid;
+      }
 
-        // My own attempts at guessing one specific other member's
-        // drawing (authorUid) — doc ID is who I'm guessing, not who's
-        // guessing (that's the outer {uid}, already pinned to me by the
-        // match above and this rule's own request.auth.uid == uid). Max 5
-        // attempts (matches the 5 attempt-marker dots in the mockup);
-        // once solved, or once attempts hits the cap, the doc is locked —
-        // no further updates satisfy either rule below.
-        match /guesses/{authorUid} {
-          // Guesses are blind until the deadline: before the round locks
-          // only the guesser can read their own; after it, any room member
-          // can — the deadline reveal shows who solved each drawing and on
-          // which attempt. These docs hold only counts, never the guessed
-          // text. roundEndsAt comes from the owner's clock (see "start
-          // round" above), and request.time is the server's.
-          function roundOverForMember() {
-            let room = get(/databases/$(database)/documents/rooms/$(roomId)).data;
-            return request.auth.uid in room.memberUids
-              && room.get('roundEndsAt', null) is timestamp
-              && request.time > room.roundEndsAt;
-          }
+      // One doc per round, `rounds/{n}` (n = 1, 2, 3, … with no end).
+      // While round n is the room's current round, members draw round n's
+      // prompts and guess round n−1's drawings; round n−1's results land
+      // when round n ends. So for any round r:
+      //
+      //   currentRound == r      its drawings are being made (private)
+      //   currentRound == r + 1  its drawings are being guessed
+      //   currentRound >= r + 2  its guesses are revealed
+      //
+      // Deleting the room leaves all of this orphaned — there's no Cloud
+      // Function to cascade it — but unreachable, since every rule here
+      // checks the room doc.
+      match /rounds/{round} {
+        function roundNo() {
+          return int(round);
+        }
 
-          allow read: if request.auth != null
-            && (request.auth.uid == uid || roundOverForMember());
+        function room() {
+          return get(/databases/$(database)/documents/rooms/$(roomId)).data;
+        }
+
+        function roomAfter() {
+          return getAfter(/databases/$(database)/documents/rooms/$(roomId)).data;
+        }
+
+        function member() {
+          return request.auth != null && request.auth.uid in room().memberUids;
+        }
+
+        function currentRound() {
+          return room().get('currentRound', 0);
+        }
+
+        // This is the current round and its deadline hasn't passed.
+        function drawingOpen() {
+          return currentRound() == roundNo()
+            && request.time < room().roundEndsAt;
+        }
+
+        allow read: if member();
+
+        // Opening: only in the same transaction that makes it the room's
+        // current round (starting round 1, or advancing). Waits for
+        // everyone in the room at that moment; players who join later
+        // start counting from the next round.
+        allow create: if member()
+          && currentRound() == roundNo() - 1
+          && roomAfter().currentRound == roundNo()
+          && request.resource.data.keys().hasOnly([
+                'number', 'opensAt', 'deadline', 'requiredUids', 'doneUids',
+              ])
+          && request.resource.data.number == roundNo()
+          && request.resource.data.opensAt == request.time
+          && request.resource.data.deadline == roomAfter().roundEndsAt
+          && request.resource.data.requiredUids == roomAfter().memberUids
+          && request.resource.data.doneUids == [];
+
+        // Early close, step 1: a player the round waits for marks
+        // themselves done — appends their own uid, nothing else. They must
+        // have drawn this round; that every card from last round is
+        // finished is client-asserted (rules can't cheaply check it),
+        // which only forfeits the cheater's own remaining guesses.
+        allow update: if member()
+          && drawingOpen()
+          && request.auth.uid in resource.data.requiredUids
+          && !(request.auth.uid in resource.data.doneUids)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['doneUids'])
+          && request.resource.data.doneUids ==
+              resource.data.doneUids.concat([request.auth.uid])
+          && exists(/databases/$(database)/documents/rooms/$(roomId)/rounds/$(round)/drawings/$(request.auth.uid));
+
+        // Closing: only in the transaction that advances the room past
+        // this round. 'allDone' is checked against the *stored* doneUids,
+        // so it can only land after the last done-write.
+        allow update: if member()
+          && currentRound() == roundNo()
+          && roomAfter().currentRound == roundNo() + 1
+          && !('closedAt' in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['closedAt', 'closeReason'])
+          && request.resource.data.closedAt == request.time
+          && ((request.resource.data.closeReason == 'deadline'
+                && request.time > resource.data.deadline)
+              || (request.resource.data.closeReason == 'allDone'
+                && everyoneDone(resource.data)));
+
+        // Leaving mid-round: drop yourself from who it waits for, so the
+        // rest can still close it early.
+        allow update: if request.auth != null
+          && request.auth.uid in resource.data.requiredUids
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['requiredUids', 'doneUids'])
+          && request.resource.data.requiredUids ==
+              resource.data.requiredUids.removeAll([request.auth.uid])
+          && request.resource.data.doneUids ==
+              resource.data.doneUids.removeAll([request.auth.uid]);
+
+        // The 3 prompts offered to a member this round. Create-once, which
+        // is what actually enforces "no swapping once you start".
+        match /issued/{uid} {
+          allow read: if request.auth != null && request.auth.uid == uid;
 
           allow create: if request.auth != null
             && request.auth.uid == uid
-            && authorUid != uid
-            && request.resource.data.keys()
-                .hasOnly(['attempts', 'solved', 'revealedCount', 'updatedAt'])
+            && member()
+            && currentRound() == roundNo()
+            && request.resource.data.keys().hasOnly(['promptIds', 'createdAt'])
+            && request.resource.data.promptIds is list
+            && request.resource.data.promptIds.size() == 3
+            && request.resource.data.createdAt == request.time;
+
+          allow update, delete: if false;
+        }
+
+        // One drawing per member per round, submit-once (a resubmit is an
+        // update, always refused). Your own is readable any time; everyone
+        // else's only once its round is over — that's when it's up for
+        // guessing. A readable drawing exposes `word` to a member reading
+        // the doc directly: Spark has no Cloud Function to check a guess
+        // against a hidden answer (see DrawingSubmission). The app never
+        // shows it during guessing.
+        match /drawings/{uid} {
+          allow read: if request.auth != null
+            && (request.auth.uid == uid
+                || (member() && currentRound() > roundNo()));
+
+          allow create: if request.auth != null
+            && request.auth.uid == uid
+            && member()
+            && drawingOpen()
+            && request.resource.data.keys().hasOnly([
+                  'authorUid', 'authorDisplayName', 'promptId', 'word',
+                  'category', 'difficulty', 'multiplier', 'canvasSize',
+                  'packedPixels', 'submittedAt',
+                ])
+            && request.resource.data.authorUid == request.auth.uid
+            && request.resource.data.authorDisplayName is string
+            && request.resource.data.authorDisplayName.size() > 0
+            && request.resource.data.promptId is string
+            && request.resource.data.promptId.size() > 0
+            && request.resource.data.word is string
+            && request.resource.data.word.size() > 0
+            && request.resource.data.category is string
+            && request.resource.data.category.size() > 0
+            && request.resource.data.difficulty in ['easy', 'medium', 'hard']
+            && request.resource.data.multiplier is number
+            && request.resource.data.canvasSize in [16, 32, 64]
+            && request.resource.data.packedPixels is string
+            && request.resource.data.packedPixels.size() > 0
+            && request.resource.data.submittedAt == request.time;
+
+          allow update, delete: if false;
+        }
+
+        // A guesser's attempts at one of this round's drawings, made
+        // during the *next* round. Doc id `{guesserUid}_{authorUid}`. Max 5
+        // attempts; once solved or out of attempts, no update satisfies
+        // the rule. Blind until revealed: before that only the guesser can
+        // read theirs; after it, any member can. These docs hold only
+        // counts, never the guessed text.
+        match /guesses/{guessId} {
+          function guessingOpen() {
+            return currentRound() == roundNo() + 1
+              && request.time < room().roundEndsAt;
+          }
+
+          allow read: if request.auth != null
+            && (resource.data.guesserUid == request.auth.uid
+                || (member() && currentRound() >= roundNo() + 2));
+
+          allow create: if request.auth != null
+            && guessId == request.auth.uid + '_' + request.resource.data.authorUid
+            && request.resource.data.guesserUid == request.auth.uid
+            && request.resource.data.authorUid is string
+            && request.resource.data.authorUid != request.auth.uid
+            && member()
+            && guessingOpen()
+            && exists(/databases/$(database)/documents/rooms/$(roomId)/rounds/$(round)/drawings/$(request.resource.data.authorUid))
+            && request.resource.data.keys().hasOnly([
+                  'guesserUid', 'authorUid', 'attempts', 'solved',
+                  'revealedCount', 'updatedAt',
+                ])
             && request.resource.data.attempts == 1
             && request.resource.data.solved is bool
-            // 0 if the first guess was already correct (doesn't matter
-            // once solved), 1 if it was wrong — Design.md: "reveal one
-            // letter per wrong guess", so a wrong attempt 1 reveals
-            // immediately rather than waiting for attempt 2.
+            // 0 if the first guess was already right, 1 if it was wrong —
+            // one letter per wrong guess, starting immediately.
             && request.resource.data.revealedCount >= 0
             && request.resource.data.revealedCount <= 1
             && request.resource.data.updatedAt == request.time;
 
           allow update: if request.auth != null
-            && request.auth.uid == uid
+            && resource.data.guesserUid == request.auth.uid
+            && member()
+            && guessingOpen()
             && resource.data.solved == false
             && resource.data.attempts < 5
-            && request.resource.data.keys().hasOnly(resource.data.keys())
+            && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['attempts', 'solved', 'revealedCount', 'updatedAt'])
             && request.resource.data.attempts == resource.data.attempts + 1
+            && request.resource.data.solved is bool
             && request.resource.data.revealedCount >=
                 resource.data.revealedCount
             && request.resource.data.revealedCount <= resource.data.attempts
@@ -280,69 +467,27 @@ service cloud.firestore {
           allow delete: if false;
         }
 
-        // Stars I've given, one doc per drawing (authorUid) — given at
-        // the deadline reveal, never part of the score. Only mine to read
-        // for now; a leaderboard star column would widen this.
-        match /stars/{authorUid} {
-          allow read: if request.auth != null && request.auth.uid == uid;
+        // Stars, given at the reveal — never part of the score. Doc id
+        // `{starrerUid}_{authorUid}`. Only yours to read for now; a
+        // leaderboard star column would widen this.
+        match /stars/{starId} {
+          allow read: if request.auth != null
+            && resource.data.starrerUid == request.auth.uid;
 
           allow create: if request.auth != null
-            && request.auth.uid == uid
-            && authorUid != uid
-            && request.resource.data.keys().hasOnly(['createdAt'])
+            && starId == request.auth.uid + '_' + request.resource.data.authorUid
+            && request.resource.data.starrerUid == request.auth.uid
+            && request.resource.data.authorUid is string
+            && request.resource.data.authorUid != request.auth.uid
+            && member()
+            && currentRound() >= roundNo() + 2
+            && request.resource.data.keys()
+                .hasOnly(['starrerUid', 'authorUid', 'createdAt'])
             && request.resource.data.createdAt == request.time;
 
-          allow delete: if request.auth != null && request.auth.uid == uid;
+          allow delete: if request.auth != null
+            && resource.data.starrerUid == request.auth.uid;
         }
-      }
-
-      // One drawing per member per room (no per-round scoping yet —
-      // Implementations.md Phase 3). Readable by any room member, not
-      // just the author — the guess screen has to render someone else's
-      // drawing. That necessarily also exposes `word` to any member who
-      // reads the doc directly (there's no Cloud Function on Spark to
-      // compare a guess against a hidden answer without exposing it to
-      // *someone* — see the long comment on DrawingSubmission for the
-      // full trade-off); the app's own UI never shows `word` during
-      // guessing, but this is real, known, and worth remembering if this
-      // project ever moves to Blaze and can do this properly via
-      // `private/answer`. `create` requires actually being a room member
-      // (cross-checked against this room's own memberUids); `update`/
-      // `delete` are always false, which is what makes a resubmit attempt
-      // (a Firestore `update`, since the doc already exists) fail
-      // outright — the real "submitDrawing called exactly once"
-      // guarantee, not just a client-side claim.
-      match /drawings/{uid} {
-        allow read: if request.auth != null
-          && request.auth.uid in
-              get(/databases/$(database)/documents/rooms/$(roomId)).data.memberUids;
-
-        allow create: if request.auth != null
-          && request.auth.uid == uid
-          && request.auth.uid in
-              get(/databases/$(database)/documents/rooms/$(roomId)).data.memberUids
-          && request.resource.data.keys().hasOnly([
-                'authorUid', 'authorDisplayName', 'promptId', 'word',
-                'category', 'difficulty', 'multiplier', 'canvasSize',
-                'packedPixels', 'submittedAt',
-              ])
-          && request.resource.data.authorUid == request.auth.uid
-          && request.resource.data.authorDisplayName is string
-          && request.resource.data.authorDisplayName.size() > 0
-          && request.resource.data.promptId is string
-          && request.resource.data.promptId.size() > 0
-          && request.resource.data.word is string
-          && request.resource.data.word.size() > 0
-          && request.resource.data.category is string
-          && request.resource.data.category.size() > 0
-          && request.resource.data.difficulty in ['easy', 'medium', 'hard']
-          && request.resource.data.multiplier is number
-          && request.resource.data.canvasSize in [16, 32, 64]
-          && request.resource.data.packedPixels is string
-          && request.resource.data.packedPixels.size() > 0
-          && request.resource.data.submittedAt == request.time;
-
-        allow update, delete: if false;
       }
     }
 

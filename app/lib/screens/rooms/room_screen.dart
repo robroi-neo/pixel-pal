@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/room_detail.dart';
 import '../../router/app_router.dart';
 import '../../services/room_service.dart';
+import '../../services/round_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../utils/clipboard.dart';
@@ -41,7 +42,7 @@ class _RoomScreenState extends State<RoomScreen> {
   Future<void> _startRound(BuildContext context, RoomDetail room) async {
     setState(() => _startingRound = true);
     try {
-      await RoomService().startRound(
+      await RoundService().startFirstRound(
         roomId: room.id,
         roundLengthHours: room.roundLengthHours,
       );
@@ -50,7 +51,7 @@ class _RoomScreenState extends State<RoomScreen> {
       if (context.mounted) {
         context.pushReplacement('${AppRoutes.rooms}/${room.id}/round');
       }
-    } on RoomServiceException catch (e) {
+    } on RoundServiceException catch (e) {
       if (mounted) setState(() => _startingRound = false);
       if (context.mounted) {
         ScaffoldMessenger.of(
@@ -213,7 +214,7 @@ class _RoomBody extends StatelessWidget {
         children: [
           Text(
             started
-                ? 'Round 1 is underway'
+                ? 'Round ${room.currentRound ?? 1} is underway'
                 : room.memberCount == 1
                 ? 'Just you so far'
                 : '${room.memberCount} players so far',

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../models/prompt.dart';
 import '../../models/room_detail.dart';
 import '../../services/drawing_service.dart';
+import '../../services/round_service.dart';
 import '../../services/room_service.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
@@ -30,9 +33,15 @@ import '../../widgets/pixel_editor.dart';
 ///   canvas lives only in this screen's memory — force-quitting loses an
 ///   unsubmitted drawing.
 class DrawingScreen extends StatefulWidget {
-  const DrawingScreen({super.key, required this.roomId, required this.prompt});
+  const DrawingScreen({
+    super.key,
+    required this.roomId,
+    required this.round,
+    required this.prompt,
+  });
 
   final String roomId;
+  final int round;
   final Prompt prompt;
 
   @override
@@ -43,6 +52,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
   final _drawingService = DrawingService();
   late final Stream<bool> _hasSubmitted = _drawingService.watchHasSubmitted(
     widget.roomId,
+    widget.round,
   );
 
   // Created once the room (and so its canvas size) is known.
@@ -59,10 +69,13 @@ class _DrawingScreenState extends State<DrawingScreen> {
     try {
       await _drawingService.submitDrawing(
         roomId: widget.roomId,
+        round: widget.round,
         prompt: widget.prompt,
         canvasSize: editor.canvasSize,
         pixels: editor.pixels,
       );
+      // Might be the last thing the round was waiting for.
+      unawaited(RoundService().checkIn(widget.roomId));
       if (!mounted) return;
       // true = submitted; PromptPickScreen moves on to guessing.
       context.pop(true);

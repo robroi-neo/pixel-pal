@@ -117,6 +117,9 @@ class RoomService {
   /// Non-owners only (owners delete instead). The leaver's drawing and
   /// guesses stay behind — there's no Cloud Function to clean them up, and
   /// other members can still guess a drawing that's already submitted.
+  /// Mid-round, they also drop out of who the current round waits for, so
+  /// the rest can still close it early (on their next check-in — the
+  /// leaver isn't a member any more, so can't advance it themselves).
   Future<void> leaveRoom(String roomId) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -129,6 +132,14 @@ class RoomService {
     try {
       await _firestore.runTransaction((tx) async {
         final memberSnap = await tx.get(memberRef);
+        final roomData = (await tx.get(roomRef)).data() ?? const {};
+        final currentRound = (roomData['currentRound'] as num?)?.toInt();
+        final roundRef = currentRound == null
+            ? null
+            : roomRef.collection('rounds').doc('$currentRound');
+        final roundData = roundRef == null
+            ? null
+            : (await tx.get(roundRef)).data();
         // Initials from the name used at join time, so the right preview
         // entry is removed even if the display name changed since.
         final displayName = displayNameOr(
@@ -140,6 +151,13 @@ class RoomService {
           'memberUids': FieldValue.arrayRemove([user.uid]),
           'memberPreview': FieldValue.arrayRemove([initialsFor(displayName)]),
         });
+        final required = roundData?['requiredUids'] as List? ?? const [];
+        if (roundRef != null && required.contains(user.uid)) {
+          tx.update(roundRef, {
+            'requiredUids': FieldValue.arrayRemove([user.uid]),
+            'doneUids': FieldValue.arrayRemove([user.uid]),
+          });
+        }
       });
     } on FirebaseException {
       throw RoomServiceException("Couldn't leave the room — try again.");
@@ -213,31 +231,6 @@ class RoomService {
     throw RoomServiceException("Couldn't create the room — try again.");
   }
 
-  /// Owner-only, one-shot — moves a room from the lobby to an active round
-  /// by stamping `roundEndsAt`. firestore.rules refuses this once the
-  /// field already exists, same pattern as [setIssuedPromptIds]. Computed
-  /// from the client's own clock (Spark, no Cloud Function to stamp it
-  /// authoritatively — see CLAUDE.md), from *now*, not from when the room
-  /// was created.
-  Future<void> startRound({
-    required String roomId,
-    required int roundLengthHours,
-  }) async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      throw RoomServiceException('Sign in to start the round.');
-    }
-    try {
-      await _firestore.collection('rooms').doc(roomId).update({
-        'roundEndsAt': Timestamp.fromDate(
-          DateTime.now().add(Duration(hours: roundLengthHours)),
-        ),
-      });
-    } on FirebaseException {
-      throw RoomServiceException("Couldn't start the round — try again.");
-    }
-  }
-
   /// Read-only — resolves a code to a room and reports whether joining is
   /// actually possible, without joining yet. [joinRoom] re-checks
   /// everything fresh in its own transaction when the user confirms, so a
@@ -280,6 +273,7 @@ class RoomService {
         ),
         canvasSize: (data['canvasSize'] as num?)?.toInt() ?? 32,
         roundLengthHours: (data['roundLengthHours'] as num?)?.toInt() ?? 24,
+        currentRound: (data['currentRound'] as num?)?.toInt(),
       );
 
       if (memberUids.contains(user.uid)) {
@@ -360,58 +354,60 @@ class RoomService {
     }
   }
 
-  /// Live version of [getIssuedPromptIds] — for a screen that should
-  /// update the moment prompts are issued (e.g. round home's drawing
-  /// status chip flipping right after prompt pick, without needing a
-  /// manual refresh).
-  Stream<List<String>?> watchIssuedPromptIds(String roomId, String uid) {
-    return _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .collection('members')
-        .doc(uid)
-        .snapshots()
-        .map((snapshot) {
-          final ids = snapshot.data()?['issuedPromptIds'];
-          return ids == null ? null : List<String>.from(ids as List);
-        });
+  DocumentReference<Map<String, dynamic>> _issuedRef(
+    String roomId,
+    int round,
+    String uid,
+  ) => _firestore
+      .collection('rooms')
+      .doc(roomId)
+      .collection('rounds')
+      .doc('$round')
+      .collection('issued')
+      .doc(uid);
+
+  /// Live version of [getIssuedPromptIds] — for round home's drawing
+  /// status chip flipping right after prompt pick.
+  Stream<List<String>?> watchIssuedPromptIds(
+    String roomId,
+    int round,
+    String uid,
+  ) {
+    return _issuedRef(roomId, round, uid).snapshots().map((snapshot) {
+      final ids = snapshot.data()?['promptIds'];
+      return ids == null ? null : List<String>.from(ids as List);
+    });
   }
 
-  /// The prompt IDs already issued to this member for their current
-  /// drawing, if any — null if [setIssuedPromptIds] hasn't been called
-  /// yet. There's no real round engine to scope this per-round yet
-  /// (Implementations.md Phase 3), so it's one persistent set per member.
-  Future<List<String>?> getIssuedPromptIds(String roomId, String uid) async {
-    final snapshot = await _firestore
-        .collection('rooms')
-        .doc(roomId)
-        .collection('members')
-        .doc(uid)
-        .get();
-    final ids = snapshot.data()?['issuedPromptIds'];
+  /// The 3 prompt IDs issued to this member for [round], if any — null if
+  /// [setIssuedPromptIds] hasn't been called for it yet.
+  Future<List<String>?> getIssuedPromptIds(
+    String roomId,
+    int round,
+    String uid,
+  ) async {
+    final snapshot = await _issuedRef(roomId, round, uid).get();
+    final ids = snapshot.data()?['promptIds'];
     return ids == null ? null : List<String>.from(ids as List);
   }
 
-  /// Persists [promptIds] as this member's issued prompts. Succeeds only
-  /// once — firestore.rules refuses the write once `issuedPromptIds`
-  /// already exists on the doc, which is what actually enforces "no
-  /// swapping once you start" rather than just claiming it on screen.
-  /// Returns false if something else (e.g. a second tab) already set it
-  /// first — the caller should re-read via [getIssuedPromptIds] only in
-  /// that case, not on every call, since that race is rare and a
-  /// same-doc round trip on the common path is pure added latency.
+  /// Persists [promptIds] as this member's prompts for [round]. Succeeds
+  /// only once — firestore.rules refuses the write once the doc exists
+  /// (a second `set` is an update), which is what actually enforces "no
+  /// swapping once you start". Returns false if something else (e.g. a
+  /// second tab) already set it first — the caller should re-read via
+  /// [getIssuedPromptIds] only in that case.
   Future<bool> setIssuedPromptIds(
     String roomId,
+    int round,
     String uid,
     List<String> promptIds,
   ) async {
     try {
-      await _firestore
-          .collection('rooms')
-          .doc(roomId)
-          .collection('members')
-          .doc(uid)
-          .update({'issuedPromptIds': promptIds});
+      await _issuedRef(roomId, round, uid).set({
+        'promptIds': promptIds,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
       return true;
     } on FirebaseException catch (e) {
       if (e.code == 'permission-denied') return false;
