@@ -10,6 +10,8 @@ import '../screens/auth/email_login_screen.dart';
 import '../screens/auth/forgot_password_screen.dart';
 import '../screens/auth/login_screen.dart';
 import '../screens/auth/register_screen.dart';
+import '../screens/guess/guess_list_screen.dart';
+import '../screens/guess/guess_results_screen.dart';
 import '../screens/guess/guess_screen.dart';
 import '../screens/profile/icon_editor_screen.dart';
 import '../screens/profile/profile_screen.dart';
@@ -57,8 +59,24 @@ class AppRoutes {
   /// server-side "current prompt" to look up instead).
   static const draw = '/rooms/:roomId/draw';
 
-  /// `/rooms/:roomId/guess` — Design.md §5 "Guess".
+  /// `/rooms/:roomId/guess` — the grid hub: this round's drawings, in a
+  /// per-player order, with your own progress on each.
   static const guess = '/rooms/:roomId/guess';
+
+  /// `/rooms/:roomId/guess/:authorUid` — the swipeable guess cards,
+  /// opened on that drawing.
+  static const guessDrawing = '/rooms/:roomId/guess/:authorUid';
+
+  /// `/rooms/:roomId/results` — the deadline reveal, played as a
+  /// sequence. `?drawing=` starts it on that drawing's stage.
+  static const results = '/rooms/:roomId/results';
+
+  static String guessDrawingPath(String roomId, String authorUid) =>
+      '$rooms/$roomId/guess/$authorUid';
+
+  static String resultsPath(String roomId, {String? startAt}) => startAt == null
+      ? '$rooms/$roomId/results'
+      : '$rooms/$roomId/results?drawing=$startAt';
 
   static const profile = '/profile';
 
@@ -151,7 +169,21 @@ GoRouter buildAppRouter(AuthService authService) {
       GoRoute(
         path: AppRoutes.guess,
         builder: (context, state) =>
-            GuessScreen(roomId: state.pathParameters['roomId']!),
+            GuessListScreen(roomId: state.pathParameters['roomId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.guessDrawing,
+        builder: (context, state) => GuessScreen(
+          roomId: state.pathParameters['roomId']!,
+          authorUid: state.pathParameters['authorUid']!,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.results,
+        builder: (context, state) => GuessResultsScreen(
+          roomId: state.pathParameters['roomId']!,
+          startAt: state.uri.queryParameters['drawing'],
+        ),
       ),
       GoRoute(
         path: AppRoutes.profile,

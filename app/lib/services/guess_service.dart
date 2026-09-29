@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -42,6 +44,90 @@ class GuessService {
         .collection('members')
         .doc(uid)
         .collection('guesses');
+  }
+
+  /// Every guesser's progress on every drawing — for the deadline reveal
+  /// — as `{guesserUid: {authorUid: progress}}`. One live query per
+  /// guesser (rooms cap at 8), combined into a single stream that first
+  /// emits once every guesser has reported in. firestore.rules only allows
+  /// reading other members' guesses once the round has locked.
+  Stream<Map<String, Map<String, GuessProgress>>> watchAllGuesses({
+    required String roomId,
+    required List<String> guesserUids,
+  }) {
+    final subscriptions = <StreamSubscription<Object?>>[];
+    final latest = <String, Map<String, GuessProgress>>{};
+    late final StreamController<Map<String, Map<String, GuessProgress>>>
+    controller;
+
+    controller = StreamController(
+      onListen: () {
+        if (guesserUids.isEmpty) {
+          controller.add(const {});
+          return;
+        }
+        for (final uid in guesserUids) {
+          final guesses = _firestore
+              .collection('rooms')
+              .doc(roomId)
+              .collection('members')
+              .doc(uid)
+              .collection('guesses');
+          subscriptions.add(
+            guesses.snapshots().listen((snapshot) {
+              latest[uid] = {
+                for (final doc in snapshot.docs)
+                  doc.id: GuessProgress.fromDoc(doc),
+              };
+              if (latest.length == guesserUids.length) {
+                controller.add(Map.of(latest));
+              }
+            }, onError: controller.addError),
+          );
+        }
+      },
+      onCancel: () async {
+        for (final subscription in subscriptions) {
+          await subscription.cancel();
+        }
+      },
+    );
+    return controller.stream;
+  }
+
+  CollectionReference<Map<String, dynamic>> _myStars(String roomId) {
+    final uid = _auth.currentUser!.uid;
+    return _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('members')
+        .doc(uid)
+        .collection('stars');
+  }
+
+  /// Author uids of the drawings I've starred. Stars are given at the
+  /// reveal and never touch the score.
+  Stream<Set<String>> watchMyStars(String roomId) {
+    return _myStars(
+      roomId,
+    ).snapshots().map((snapshot) => {for (final doc in snapshot.docs) doc.id});
+  }
+
+  Future<void> setStarred({
+    required String roomId,
+    required String authorUid,
+    required bool starred,
+  }) async {
+    final ref = _myStars(roomId).doc(authorUid);
+    try {
+      if (starred) {
+        await ref.set({'createdAt': FieldValue.serverTimestamp()});
+      } else {
+        await ref.delete();
+      }
+    } on FirebaseException {
+      throw GuessServiceException("Couldn't save your star — try again.");
+    }
   }
 
   /// Live, keyed by the drawing's authorUid.
@@ -123,7 +209,9 @@ class GuessService {
     }
 
     if (correct) return GuessOutcome.correct;
-    if (nextAttempts >= GuessProgress.maxAttempts) return GuessOutcome.outOfAttempts;
+    if (nextAttempts >= GuessProgress.maxAttempts) {
+      return GuessOutcome.outOfAttempts;
+    }
     return GuessOutcome.incorrect;
   }
 }

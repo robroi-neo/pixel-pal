@@ -67,6 +67,26 @@ class DrawingService {
         );
   }
 
+  /// Every drawing in the room, the caller's own included — the guess
+  /// list shows "yours" alongside the ones to guess.
+  Stream<List<DrawingSubmission>> watchDrawings(String roomId) {
+    return _firestore
+        .collection('rooms')
+        .doc(roomId)
+        .collection('drawings')
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs.map(DrawingSubmission.fromDoc).toList(),
+        );
+  }
+
+  /// One member's drawing — null if they haven't submitted (or it's gone).
+  Stream<DrawingSubmission?> watchDrawing(String roomId, String authorUid) {
+    return _ref(roomId, authorUid).snapshots().map(
+      (doc) => doc.exists ? DrawingSubmission.fromDoc(doc) : null,
+    );
+  }
+
   /// How many drawings exist in this room, including the caller's own —
   /// for naming the cost of deleting it. A server-side count aggregate,
   /// so it doesn't download the drawings themselves.

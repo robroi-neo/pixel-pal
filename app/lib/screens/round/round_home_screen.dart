@@ -16,7 +16,9 @@ import '../../theme/app_dimens.dart';
 import '../../theme/app_tokens.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_chip.dart';
+import '../../widgets/deadline_chip.dart';
 import '../../widgets/loading_view.dart';
+import '../../widgets/segmented_progress.dart';
 
 /// Design.md §5 "Round home (hub)": one primary button, the other routes
 /// are text links; two task cards (drawing, guessing) with the unstarted
@@ -251,7 +253,7 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
                         final guesses = guessesSnapshot.data ?? const {};
                         final total = drawings.length;
                         final done = drawings
-                            .where((d) => guesses[d.authorUid]?.solved ?? false)
+                            .where((d) => guesses[d.authorUid]?.isDone ?? false)
                             .length;
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,7 +275,7 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
                               ],
                             ),
                             const SizedBox(height: AppSpacing.sm),
-                            _SegmentedProgress(total: total, done: done),
+                            SegmentedProgress(total: total, done: done),
                           ],
                         );
                       },
@@ -284,10 +286,16 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
               const SizedBox(height: AppSpacing.xl),
               // Design.md §5: one primary button. Once the drawing's in,
               // guessing is the only task left, so it takes that slot.
-              if (submitted) ...[
+              if (room.isRoundLocked) ...[
+                AppButton(
+                  label: 'See the results',
+                  onPressed: () async =>
+                      context.push(AppRoutes.resultsPath(room.id)),
+                ),
+                const SizedBox(height: AppSpacing.md),
+              ] else if (submitted) ...[
                 AppButton(
                   label: 'Guess drawings',
-                  enabled: !room.isRoundLocked,
                   onPressed: () async =>
                       context.push('${AppRoutes.rooms}/${room.id}/guess'),
                 ),
@@ -295,18 +303,14 @@ class _RoundHomeBodyState extends State<_RoundHomeBody> {
               ] else ...[
                 AppButton(
                   label: 'Pick your prompt',
-                  enabled: !room.isRoundLocked,
                   onPressed: () async =>
                       context.push('${AppRoutes.rooms}/${room.id}/prompt-pick'),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 Center(
                   child: TextButton(
-                    onPressed: room.isRoundLocked
-                        ? null
-                        : () => context.push(
-                            '${AppRoutes.rooms}/${room.id}/guess',
-                          ),
+                    onPressed: () =>
+                        context.push('${AppRoutes.rooms}/${room.id}/guess'),
                     child: const Text('Carry on guessing'),
                   ),
                 ),
@@ -335,13 +339,6 @@ class _RoundDeadlineRow extends StatelessWidget {
 
   final DateTime? roundEndsAt;
 
-  static String _clockTime(DateTime dt) {
-    final hour12 = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final minute = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour < 12 ? 'AM' : 'PM';
-    return '$hour12:$minute $period';
-  }
-
   @override
   Widget build(BuildContext context) {
     final endsAt = roundEndsAt;
@@ -352,60 +349,19 @@ class _RoundDeadlineRow extends StatelessWidget {
 
     return Row(
       children: [
-        locked ? const AttentionChip('locked') : _hoursLeftChip(endsAt),
+        DeadlineChip(endsAt: endsAt),
         const SizedBox(width: AppSpacing.sm),
         Flexible(
           child: Text(
             locked
                 ? 'this round has ended'
-                : 'everything locks at ${_clockTime(endsAt)}',
+                : 'everything locks at ${clockTime(endsAt)}',
             style: textTheme.bodySmall?.copyWith(
               color: AppColors.ink.withValues(alpha: 0.6),
             ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
-      ],
-    );
-  }
-
-  Widget _hoursLeftChip(DateTime endsAt) {
-    final remaining = endsAt.difference(DateTime.now());
-    final label = remaining.inHours >= 1
-        ? '${remaining.inHours}h left'
-        : '${remaining.inMinutes.clamp(0, 59)}m left';
-    return NeutralChip(label);
-  }
-}
-
-/// §4 "Progress replaces the timer": "3 of 7 done. Segmented bars, not
-/// countdowns."
-class _SegmentedProgress extends StatelessWidget {
-  const _SegmentedProgress({required this.total, required this.done});
-
-  final int total;
-  final int done;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (var i = 0; i < total; i++) ...[
-          if (i > 0) const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: Container(
-              height: 8,
-              decoration: BoxDecoration(
-                color: i < done ? AppColors.ink : AppColors.white,
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: AppColors.ink,
-                  width: AppBorders.thin,
-                ),
-              ),
-            ),
-          ),
-        ],
       ],
     );
   }

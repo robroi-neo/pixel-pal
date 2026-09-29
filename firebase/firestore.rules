@@ -235,7 +235,21 @@ service cloud.firestore {
         // once solved, or once attempts hits the cap, the doc is locked —
         // no further updates satisfy either rule below.
         match /guesses/{authorUid} {
-          allow read: if request.auth != null && request.auth.uid == uid;
+          // Guesses are blind until the deadline: before the round locks
+          // only the guesser can read their own; after it, any room member
+          // can — the deadline reveal shows who solved each drawing and on
+          // which attempt. These docs hold only counts, never the guessed
+          // text. roundEndsAt comes from the owner's clock (see "start
+          // round" above), and request.time is the server's.
+          function roundOverForMember() {
+            let room = get(/databases/$(database)/documents/rooms/$(roomId)).data;
+            return request.auth.uid in room.memberUids
+              && room.get('roundEndsAt', null) is timestamp
+              && request.time > room.roundEndsAt;
+          }
+
+          allow read: if request.auth != null
+            && (request.auth.uid == uid || roundOverForMember());
 
           allow create: if request.auth != null
             && request.auth.uid == uid
@@ -264,6 +278,21 @@ service cloud.firestore {
             && request.resource.data.updatedAt == request.time;
 
           allow delete: if false;
+        }
+
+        // Stars I've given, one doc per drawing (authorUid) — given at
+        // the deadline reveal, never part of the score. Only mine to read
+        // for now; a leaderboard star column would widen this.
+        match /stars/{authorUid} {
+          allow read: if request.auth != null && request.auth.uid == uid;
+
+          allow create: if request.auth != null
+            && request.auth.uid == uid
+            && authorUid != uid
+            && request.resource.data.keys().hasOnly(['createdAt'])
+            && request.resource.data.createdAt == request.time;
+
+          allow delete: if request.auth != null && request.auth.uid == uid;
         }
       }
 
