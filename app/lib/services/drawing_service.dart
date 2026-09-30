@@ -51,6 +51,16 @@ class DrawingService {
     ).doc(uid).snapshots().map((doc) => doc.exists);
   }
 
+  /// The caller's own drawing for [round] — null until they submit.
+  Stream<DrawingSubmission?> watchMyDrawing(String roomId, int round) {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return Stream.value(null);
+    return _drawings(roomId, round)
+        .doc(uid)
+        .snapshots()
+        .map((doc) => doc.exists ? DrawingSubmission.fromDoc(doc) : null);
+  }
+
   /// Every drawing from [round] *except* the caller's own — the cards to
   /// guess. Readable once that round is over (see firestore.rules). Small
   /// rooms (max 8), so filtering client-side is simplest.

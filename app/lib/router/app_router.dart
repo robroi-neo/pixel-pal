@@ -13,6 +13,7 @@ import '../screens/auth/register_screen.dart';
 import '../screens/guess/guess_list_screen.dart';
 import '../screens/guess/guess_results_screen.dart';
 import '../screens/guess/guess_screen.dart';
+import '../screens/leaderboard/leaderboard_screen.dart';
 import '../screens/profile/icon_editor_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/rooms/create_room_screen.dart';
@@ -80,6 +81,11 @@ class AppRoutes {
 
   static String guessDrawingPath(String roomId, int round, String authorUid) =>
       '$rooms/$roomId/rounds/$round/guess/$authorUid';
+
+  /// The room's table: season averages, or one round's scores.
+  static const leaderboard = '/rooms/:roomId/leaderboard';
+
+  static String leaderboardPath(String roomId) => '$rooms/$roomId/leaderboard';
 
   static String resultsPath(String roomId, int round, {String? startAt}) =>
       startAt == null
@@ -199,6 +205,11 @@ GoRouter buildAppRouter(AuthService authService) {
           round: int.parse(state.pathParameters['round']!),
           startAt: state.uri.queryParameters['drawing'],
         ),
+      ),
+      GoRoute(
+        path: AppRoutes.leaderboard,
+        builder: (context, state) =>
+            LeaderboardScreen(roomId: state.pathParameters['roomId']!),
       ),
       GoRoute(
         path: AppRoutes.profile,

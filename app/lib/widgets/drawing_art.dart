@@ -11,12 +11,25 @@ import 'pixel_canvas.dart';
 class DrawingArt extends StatelessWidget {
   const DrawingArt({
     super.key,
-    required this.drawing,
+    required DrawingSubmission this.drawing,
     this.frameColor = AppColors.ink,
     this.maxWidth = 220,
-  });
+  }) : pixels = null,
+       canvasSize = null;
 
-  final DrawingSubmission drawing;
+  /// Art that isn't a submitted drawing yet — e.g. the editor's canvas on
+  /// the submit confirmation.
+  const DrawingArt.pixels({
+    super.key,
+    required List<Color> this.pixels,
+    required int this.canvasSize,
+    this.frameColor = AppColors.ink,
+    this.maxWidth = 220,
+  }) : drawing = null;
+
+  final DrawingSubmission? drawing;
+  final List<Color>? pixels;
+  final int? canvasSize;
   final Color frameColor;
   final double maxWidth;
 
@@ -43,8 +56,8 @@ class DrawingArt extends StatelessWidget {
                 ),
               ),
               child: PixelPreview(
-                canvasSize: drawing.canvasSize,
-                pixels: drawing.pixels,
+                canvasSize: canvasSize ?? drawing!.canvasSize,
+                pixels: pixels ?? drawing!.pixels,
               ),
             ),
           ),

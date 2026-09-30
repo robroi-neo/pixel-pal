@@ -251,6 +251,16 @@ service cloud.firestore {
           && request.resource.data.status == 'active'
           && request.resource.data.joinedAt == request.time;
 
+        // What you've already been shown (RoomService.markSeen): the
+        // round-start moment and the newest results. Your own doc, and
+        // only these two numbers.
+        allow update: if request.auth != null
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['seenRound', 'seenResultsRound'])
+          && request.resource.data.get('seenRound', 0) is int
+          && request.resource.data.get('seenResultsRound', 0) is int;
+
         // Leaving — only your own doc, and never the owner's.
         allow delete: if request.auth != null
           && request.auth.uid == uid
@@ -466,28 +476,64 @@ service cloud.firestore {
 
           allow delete: if false;
         }
+      }
 
-        // Stars, given at the reveal — never part of the score. Doc id
-        // `{starrerUid}_{authorUid}`. Only yours to read for now; a
-        // leaderboard star column would widen this.
-        match /stars/{starId} {
-          allow read: if request.auth != null
-            && resource.data.starrerUid == request.auth.uid;
-
-          allow create: if request.auth != null
-            && starId == request.auth.uid + '_' + request.resource.data.authorUid
-            && request.resource.data.starrerUid == request.auth.uid
-            && request.resource.data.authorUid is string
-            && request.resource.data.authorUid != request.auth.uid
-            && member()
-            && currentRound() >= roundNo() + 2
-            && request.resource.data.keys()
-                .hasOnly(['starrerUid', 'authorUid', 'createdAt'])
-            && request.resource.data.createdAt == request.time;
-
-          allow delete: if request.auth != null
-            && resource.data.starrerUid == request.auth.uid;
+      // Round scores and the season table (ScoreService): one doc per
+      // round whose results are out, written once by whichever member's
+      // app gets there first, in order — round r only once round r−1
+      // exists, since each doc's season totals build on the last. Spark
+      // has no server to score a round, so the numbers are computed
+      // client-side from drawings and guesses every member can read by
+      // then; the rules can check when and in what order, not the maths.
+      match /scores/{round} {
+        function room() {
+          return get(/databases/$(database)/documents/rooms/$(roomId)).data;
         }
+
+        allow read: if request.auth != null
+          && request.auth.uid in room().memberUids;
+
+        allow create: if request.auth != null
+          && request.auth.uid in room().memberUids
+          && room().get('currentRound', 0) >= int(round) + 2
+          && (int(round) == 1
+              || exists(/databases/$(database)/documents/rooms/$(roomId)/scores/$(string(int(round) - 1))))
+          && request.resource.data.keys()
+              .hasOnly(['round', 'entries', 'season', 'createdAt'])
+          && request.resource.data.round == int(round)
+          && request.resource.data.entries is map
+          && request.resource.data.season is map
+          && request.resource.data.createdAt == request.time;
+
+        allow update, delete: if false;
+      }
+
+      // Stars, given at the reveal — never part of the score. One
+      // room-wide collection (doc id `{round}_{starrerUid}_{authorUid}`)
+      // so the leaderboard can count each player's stars with a single
+      // aggregate query. Only for a drawing that exists in a round whose
+      // results are out, and never your own.
+      match /stars/{starId} {
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.memberUids;
+
+        allow create: if request.auth != null
+          && request.resource.data.keys()
+              .hasOnly(['round', 'starrerUid', 'authorUid', 'createdAt'])
+          && request.resource.data.round is int
+          && request.resource.data.starrerUid == request.auth.uid
+          && request.resource.data.authorUid is string
+          && request.resource.data.authorUid != request.auth.uid
+          && starId == string(request.resource.data.round) + '_'
+              + request.auth.uid + '_' + request.resource.data.authorUid
+          && request.auth.uid in get(/databases/$(database)/documents/rooms/$(roomId)).data.memberUids
+          && get(/databases/$(database)/documents/rooms/$(roomId)).data.get('currentRound', 0)
+              >= request.resource.data.round + 2
+          && exists(/databases/$(database)/documents/rooms/$(roomId)/rounds/$(string(request.resource.data.round))/drawings/$(request.resource.data.authorUid))
+          && request.resource.data.createdAt == request.time;
+
+        allow delete: if request.auth != null
+          && resource.data.starrerUid == request.auth.uid;
       }
     }
 

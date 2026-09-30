@@ -145,15 +145,17 @@ class _PromptPickScreenState extends State<PromptPickScreen> {
                       final selected = prompts.firstWhere(
                         (p) => p.id == _selectedId,
                       );
-                      final submitted = await context.push<bool>(
+                      // The editor pops true = "on to guessing", false =
+                      // "back to the hub" (both after submitting), null =
+                      // backed out without submitting.
+                      final next = await context.push<bool>(
                         AppRoutes.drawPath(widget.roomId, widget.round),
                         extra: selected,
                       );
-                      if (submitted != true || !context.mounted) return;
-                      // On to last round's drawings — replaced (not
-                      // pushed) so Back from guessing returns to the hub.
-                      // Round 1 is draw-only, so straight back to the hub.
-                      if (widget.round > 1) {
+                      if (next == null || !context.mounted) return;
+                      // Replaced (not pushed) so Back from guessing
+                      // returns to the hub rather than to this list.
+                      if (next && widget.round > 1) {
                         context.pushReplacement(
                           AppRoutes.guessPath(widget.roomId, widget.round - 1),
                         );

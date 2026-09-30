@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+import '../models/membership.dart';
 import '../models/room_detail.dart';
 import '../models/room_lookup.dart';
 import '../models/room_summary.dart';
@@ -351,6 +352,31 @@ class RoomService {
       rethrow;
     } on FirebaseException {
       throw RoomServiceException("Couldn't join that room — try again.");
+    }
+  }
+
+  DocumentReference<Map<String, dynamic>> _myMemberRef(String roomId) =>
+      _firestore
+          .collection('rooms')
+          .doc(roomId)
+          .collection('members')
+          .doc(_auth.currentUser!.uid);
+
+  /// What the signed-in player has already been shown in this room.
+  Stream<Membership> watchMembership(String roomId) {
+    return _myMemberRef(roomId).snapshots().map(Membership.fromDoc);
+  }
+
+  /// Records that the player has seen round [round]'s start and/or round
+  /// [resultsRound]'s results. Best effort — at worst a moment shows
+  /// twice.
+  Future<void> markSeen(String roomId, {int? round, int? resultsRound}) async {
+    try {
+      await _myMemberRef(
+        roomId,
+      ).update({'seenRound': ?round, 'seenResultsRound': ?resultsRound});
+    } on FirebaseException {
+      // See the doc comment.
     }
   }
 

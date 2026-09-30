@@ -172,6 +172,13 @@ class _GuessScreenState extends State<GuessScreen> {
       );
       if (!mounted) return;
       _input.clear();
+      // Felt as well as seen: a firm buzz for a solve, a soft one for a
+      // miss (the tiles shake too).
+      if (outcome == GuessOutcome.correct) {
+        HapticFeedback.heavyImpact();
+      } else {
+        HapticFeedback.mediumImpact();
+      }
       setState(() {
         if (outcome == GuessOutcome.incorrect) {
           final left = GuessProgress.maxAttempts - (progress.attempts + 1);
@@ -243,7 +250,9 @@ class _GuessScreenState extends State<GuessScreen> {
                     if (!roomSnapshot.hasData ||
                         !drawingsSnapshot.hasData ||
                         !guessesSnapshot.hasData) {
-                      return const LoadingView();
+                      return LoadingView(
+                        message: "Loading round ${widget.round}'s drawings…",
+                      );
                     }
                     if (room == null) {
                       return _Message('This room no longer exists.');

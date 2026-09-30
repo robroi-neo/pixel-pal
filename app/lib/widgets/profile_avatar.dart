@@ -50,6 +50,7 @@ class ProfileAvatar extends StatelessWidget {
     this.fallbackInitials,
     this.size = 28,
     this.ringColor,
+    this.inactive = false,
   });
 
   final String uid;
@@ -58,6 +59,16 @@ class ProfileAvatar extends StatelessWidget {
   final double size;
   final Color? ringColor;
 
+  /// Design.md §3: grey when inactive — the drawn icon goes greyscale.
+  final bool inactive;
+
+  static const _greyscale = ColorFilter.matrix([
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0.2126, 0.7152, 0.0722, 0, 0, //
+    0, 0, 0, 1, 0,
+  ]);
+
   @override
   Widget build(BuildContext context) {
     return ProfileBuilder(
@@ -65,11 +76,14 @@ class ProfileAvatar extends StatelessWidget {
       builder: (context, profile) {
         final icon = profile?.icon;
         if (icon != null) {
-          return PixelIconAvatar(
+          final avatar = PixelIconAvatar(
             pixels: icon,
             size: size,
             ringColor: ringColor,
           );
+          return inactive
+              ? ColorFiltered(colorFilter: _greyscale, child: avatar)
+              : avatar;
         }
         return AppAvatar(
           initials: profile != null
@@ -77,6 +91,7 @@ class ProfileAvatar extends StatelessWidget {
               : fallbackInitials ?? initialsFor(fallbackName),
           size: size,
           ringColor: ringColor,
+          inactive: inactive,
         );
       },
     );

@@ -80,12 +80,19 @@ class GuessService {
     });
   }
 
+  /// Stars live in one room-wide collection, `rooms/{roomId}/stars`, doc
+  /// id `{round}_{starrerUid}_{authorUid}` — so the leaderboard can count
+  /// each player's stars with one small aggregate query apiece.
+  CollectionReference<Map<String, dynamic>> _stars(String roomId) =>
+      _firestore.collection('rooms').doc(roomId).collection('stars');
+
   /// Author uids of the drawings I've starred in [round]. Stars are given
   /// at the reveal and never touch the score.
   Stream<Set<String>> watchMyStars(String roomId, int round) {
     final uid = _auth.currentUser!.uid;
-    return _round(roomId, round, 'stars')
+    return _stars(roomId)
         .where('starrerUid', isEqualTo: uid)
+        .where('round', isEqualTo: round)
         .snapshots()
         .map(
           (snapshot) => {
@@ -102,10 +109,11 @@ class GuessService {
     required bool starred,
   }) async {
     final uid = _auth.currentUser!.uid;
-    final ref = _round(roomId, round, 'stars').doc('${uid}_$authorUid');
+    final ref = _stars(roomId).doc('${round}_${uid}_$authorUid');
     try {
       if (starred) {
         await ref.set({
+          'round': round,
           'starrerUid': uid,
           'authorUid': authorUid,
           'createdAt': FieldValue.serverTimestamp(),
@@ -116,6 +124,22 @@ class GuessService {
     } on FirebaseException {
       throw GuessServiceException("Couldn't save your star — try again.");
     }
+  }
+
+  /// Stars each of [uids] has received in this room, all rounds — one
+  /// count aggregate per player (billed per 1,000 index entries, not per
+  /// star).
+  Future<Map<String, int>> countStarsReceived(
+    String roomId,
+    List<String> uids,
+  ) async {
+    final counts = await Future.wait([
+      for (final uid in uids)
+        _stars(roomId).where('authorUid', isEqualTo: uid).count().get(),
+    ]);
+    return {
+      for (var i = 0; i < uids.length; i++) uids[i]: counts[i].count ?? 0,
+    };
   }
 
   static bool fuzzyMatches(String guess, String answer) {

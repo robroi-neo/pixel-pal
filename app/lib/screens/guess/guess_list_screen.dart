@@ -120,7 +120,9 @@ class _GuessListScreenState extends State<GuessListScreen> {
                     if (!roomSnapshot.hasData ||
                         !drawingsSnapshot.hasData ||
                         !guessesSnapshot.hasData) {
-                      return const LoadingView();
+                      return LoadingView(
+                        message: "Loading round ${widget.round}'s drawings…",
+                      );
                     }
                     if (room == null) {
                       return Center(

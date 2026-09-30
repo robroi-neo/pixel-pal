@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/guess_progress.dart';
 import '../models/room_detail.dart';
 import '../models/round_info.dart';
+import 'score_service.dart';
 
 /// Thrown by [RoundService] with copy that's already safe to show the
 /// user — same pattern as the app's other `*ServiceException` types.
@@ -140,6 +141,9 @@ class RoundService {
     } on FirebaseException {
       // See the doc comment — the next check-in retries.
     }
+    // Whichever round the room is on now, score any results that are out
+    // so the reveal and the leaderboard have them.
+    await ScoreService().ensureScored(roomId);
   }
 
   Future<bool> _isDone(String roomId, String uid, int n) async {
