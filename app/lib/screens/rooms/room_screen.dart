@@ -227,7 +227,7 @@ class _RoomBody extends StatelessWidget {
               started
                   ? 'Share the code below to bring in more players.'
                   : isOwner
-                  ? "Start whenever you're ready — solo is fine too."
+                  ? "Start whenever you're ready."
                   : 'Waiting for ${owner?.displayName ?? room.ownerDisplayName} '
                         'to start round 1.',
               style: textTheme.bodyMedium,

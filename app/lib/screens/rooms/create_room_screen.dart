@@ -10,8 +10,7 @@ import 'room_created_screen.dart';
 
 enum _CanvasSize {
   size16(16, '16 × 16', 'Fast and blunt, peak abstraction'),
-  size32(32, '32 × 32', 'Just big enough.'),
-  size64(64, '64 × 64', 'Ten-minute drawings.');
+  size32(32, '32 × 32', 'Just big enough.');
 
   const _CanvasSize(this.value, this.label, this.subtitle);
   final int value;
@@ -21,8 +20,7 @@ enum _CanvasSize {
 
 enum _RoundLength {
   h12(12, '12h'),
-  h24(24, '24h'),
-  h48(48, '48h');
+  h24(24, '24h');
 
   const _RoundLength(this.value, this.label);
   final int value;
@@ -99,11 +97,11 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text('Set it up once', style: textTheme.headlineMedium),
+              Text('Set up your room', style: textTheme.headlineMedium),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Both settings can change later. A round already running '
-                'keeps the ones it started with.',
+                'Settings cannot be changed for now. '
+                'Perhaps in future iterations.',
                 style: textTheme.bodyMedium,
               ),
               const SizedBox(height: AppSpacing.xl),

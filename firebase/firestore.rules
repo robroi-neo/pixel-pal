@@ -128,8 +128,8 @@ service cloud.firestore {
         && request.resource.data.name.size() <= 40
         && request.resource.data.code is string
         && request.resource.data.code.size() == 6
-        && request.resource.data.canvasSize in [16, 32, 64]
-        && request.resource.data.roundLengthHours in [12, 24, 48]
+        && request.resource.data.canvasSize in [16, 32]
+        && request.resource.data.roundLengthHours in [12, 24]
         && request.resource.data.createdAt == request.time;
 
       allow update: if request.auth != null
@@ -162,8 +162,8 @@ service cloud.firestore {
 
       // Starting round 1 (RoundService.startFirstRound): owner-only,
       // one-shot from the lobby — once currentRound exists this can't be
-      // satisfied again. The same transaction creates rounds/1. 49h (not
-      // 48h) gives an hour of clock-skew slack, since roundEndsAt comes
+      // satisfied again. The same transaction creates rounds/1. 25h (not
+      // 24h) gives an hour of clock-skew slack, since roundEndsAt comes
       // from the owner's own device clock (Spark has no Cloud Function to
       // stamp it authoritatively).
       allow update: if request.auth != null
@@ -175,7 +175,7 @@ service cloud.firestore {
         && request.resource.data.currentRound == 1
         && request.resource.data.roundEndsAt is timestamp
         && request.resource.data.roundEndsAt > request.time
-        && request.resource.data.roundEndsAt < request.time + duration.value(49, 'h')
+        && request.resource.data.roundEndsAt < request.time + duration.value(25, 'h')
         && existsAfter(/databases/$(database)/documents/rooms/$(roomId)/rounds/1);
 
       // The round engine (RoundService.tryAdvance). There's no scheduler on

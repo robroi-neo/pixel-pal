@@ -134,9 +134,9 @@ class RoomCreatedScreen extends StatelessWidget {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              "There's nothing to guess until everyone's "
-                              'first drawings are in. Guessing starts in '
-                              'round 2.',
+                              'Everyone draws first. Guessing starts in '
+                              'round 2, when round 1 ends — or sooner, '
+                              'once everyone has drawn.',
                               style: textTheme.bodySmall?.copyWith(
                                 color: AppColors.ink.withValues(alpha: 0.7),
                               ),
