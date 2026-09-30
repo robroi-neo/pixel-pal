@@ -12,6 +12,7 @@ import '../../theme/app_dimens.dart';
 import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_sheet.dart';
+import '../../widgets/app_snackbar.dart';
 
 /// The "join a room" bottom sheet reached from the room list's "New room
 /// or join code" button. Design.md marks create/join room as not designed
@@ -50,9 +51,7 @@ class _JoinRoomSheetState extends State<JoinRoomSheet> {
 
   Future<void> _findRoom() async {
     if (_code.length != 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter the full 6-character code.')),
-      );
+      AppSnackBar.show(context, 'Enter the full 6-character code.');
       return;
     }
     try {
@@ -61,9 +60,7 @@ class _JoinRoomSheetState extends State<JoinRoomSheet> {
       setState(() => _result = result);
     } on RoomServiceException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      AppSnackBar.show(context, e.message);
     }
   }
 
@@ -75,9 +72,7 @@ class _JoinRoomSheetState extends State<JoinRoomSheet> {
       context.push('${AppRoutes.rooms}/${joined.roomId}');
     } on RoomServiceException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      AppSnackBar.show(context, e.message);
       // The room's state may have moved since the preview (e.g. it just
       // filled up) — refresh so the sheet reflects what's actually true.
       unawaited(_findRoom());

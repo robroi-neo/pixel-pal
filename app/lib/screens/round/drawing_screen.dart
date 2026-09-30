@@ -16,6 +16,7 @@ import '../../widgets/app_chip.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/pixel_canvas.dart';
 import '../../widgets/pixel_editor.dart';
+import '../../widgets/app_snackbar.dart';
 
 /// Design.md §5 "Draw / editor" — reached from prompt pick's "Start
 /// drawing". Implementations.md calls this the longest client phase
@@ -77,13 +78,19 @@ class _DrawingScreenState extends State<DrawingScreen> {
       // Might be the last thing the round was waiting for.
       unawaited(RoundService().checkIn(widget.roomId));
       if (!mounted) return;
+      // Shown on the app-wide messenger, so it stays up while the editor
+      // closes and the next screen (guessing, or the hub) opens.
+      AppSnackBar.success(
+        context,
+        widget.round == 1
+            ? 'Drawing submitted! Everyone guesses it in round 2.'
+            : "Drawing submitted! It's up for guessing next round.",
+      );
       // true = submitted; PromptPickScreen moves on to guessing.
       context.pop(true);
     } on DrawingServiceException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      AppSnackBar.show(context, e.message);
     }
   }
 

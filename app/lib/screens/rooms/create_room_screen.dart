@@ -7,6 +7,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../widgets/app_button.dart';
 import 'room_created_screen.dart';
+import '../../widgets/app_snackbar.dart';
 
 enum _CanvasSize {
   size16(16, '16 × 16', 'Fast and blunt, peak abstraction'),
@@ -73,9 +74,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
       );
     } on RoomServiceException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      AppSnackBar.show(context, e.message);
     }
   }
 

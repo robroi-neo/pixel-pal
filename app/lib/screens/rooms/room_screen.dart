@@ -13,6 +13,7 @@ import '../../utils/dashed_path.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/app_snackbar.dart';
 
 /// The room's lobby — reached by tapping a room that hasn't started its
 /// round yet (any member, not just the owner: everyone waits here until
@@ -54,9 +55,7 @@ class _RoomScreenState extends State<RoomScreen> {
     } on RoundServiceException catch (e) {
       if (mounted) setState(() => _startingRound = false);
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        AppSnackBar.show(context, e.message);
       }
     }
   }
@@ -179,9 +178,7 @@ class _RoomScreenState extends State<RoomScreen> {
       if (context.mounted) context.pop();
     } on RoomServiceException catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        AppSnackBar.show(context, e.message);
       }
     }
   }

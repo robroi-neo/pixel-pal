@@ -19,6 +19,7 @@ import '../../widgets/deadline_chip.dart';
 import '../../widgets/drawing_art.dart';
 import '../../widgets/profile_avatar.dart';
 import '../../widgets/reveal_chrome.dart';
+import '../../widgets/app_snackbar.dart';
 
 /// Guessing flow, screen E — round [GuessResultsScreen.round]'s reveal.
 /// Once the round its drawings were guessed in has ended, the group
@@ -102,9 +103,7 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
       );
     } on GuessServiceException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.message)));
+      AppSnackBar.show(context, e.message);
     }
   }
 

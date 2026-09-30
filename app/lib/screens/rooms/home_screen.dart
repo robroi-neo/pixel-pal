@@ -17,6 +17,7 @@ import '../../widgets/loading_view.dart';
 import '../../widgets/profile_avatar.dart';
 import 'join_room_sheet.dart';
 import 'room_actions_sheet.dart';
+import '../../widgets/app_snackbar.dart';
 
 /// Reads the signed-in user's rooms live from Firestore — every room the
 /// user is a member of, whether they created it or joined it by code
@@ -190,17 +191,15 @@ class _HomeScreenState extends State<HomeScreen> {
   /// round.
   void _deleteWithUndo(RoomSummary room) {
     setState(() => _pendingDeleteIds.add(room.id));
-    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
-    final controller = messenger.showSnackBar(
-      SnackBar(
-        duration: const Duration(seconds: 5),
-        content: _UndoDeleteContent(
-          title: '${room.title} deleted',
-          onUndo: () => messenger.hideCurrentSnackBar(
-            reason: SnackBarClosedReason.action,
-          ),
-        ),
+    final messenger = ScaffoldMessenger.of(context);
+    final controller = AppSnackBar.contentOn(
+      messenger,
+      _UndoDeleteContent(
+        title: '${room.title} deleted',
+        onUndo: () =>
+            messenger.hideCurrentSnackBar(reason: SnackBarClosedReason.action),
       ),
+      duration: const Duration(seconds: 5),
     );
 
     controller.closed.then((reason) async {
@@ -208,7 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
         try {
           await RoomService().deleteRoom(roomId: room.id, code: room.code);
         } on RoomServiceException catch (e) {
-          messenger.showSnackBar(SnackBar(content: Text(e.message)));
+          AppSnackBar.showOn(messenger, e.message);
         }
       }
       if (mounted) setState(() => _pendingDeleteIds.remove(room.id));
@@ -245,9 +244,7 @@ class _HomeScreenState extends State<HomeScreen> {
       await removal();
     } on RoomServiceException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.message)));
+        AppSnackBar.show(context, e.message);
       }
     }
   }

@@ -10,6 +10,7 @@ import '../../utils/pixel_codec.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/pixel_editor.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/app_snackbar.dart';
 
 /// Draw your profile icon — the same [PixelEditor] as a round's drawing,
 /// at 16×16, with the preview showing the round avatar crop instead of the
@@ -39,21 +40,17 @@ class _IconEditorScreenState extends State<IconEditorScreen> {
   Future<void> _save() async {
     final messenger = ScaffoldMessenger.of(context);
     if (PixelCodec.isEmpty(_editor.pixels)) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Draw something first.')),
-      );
+      AppSnackBar.showOn(messenger, 'Draw something first.');
       return;
     }
     try {
       await ProfileService().saveIcon(_editor.pixels);
     } on ProfileServiceException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      AppSnackBar.showOn(messenger, e.message);
       return;
     }
     if (!mounted) return;
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Everyone sees your new icon now')),
-    );
+    AppSnackBar.successOn(messenger, 'Everyone sees your new icon now');
     context.pop();
   }
 

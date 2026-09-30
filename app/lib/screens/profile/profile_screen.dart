@@ -15,6 +15,7 @@ import '../../widgets/app_button.dart';
 import '../../widgets/app_sheet.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/profile_avatar.dart';
+import '../../widgets/app_snackbar.dart';
 
 /// Reached by tapping your avatar on the room list. A full screen rather
 /// than a drawer (the app has one destination, the room list) or a half
@@ -75,7 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       await _profileService.saveDisplayName(name);
     } on ProfileServiceException catch (e) {
-      _showSnack(Text(e.message));
+      _showSnack(e.message);
       return false;
     }
     if (!mounted) return true;
@@ -89,33 +90,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _discard() => _nameController.text = _savedName ?? '';
 
-  void _showSnack(Widget content) {
+  void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: content));
+    AppSnackBar.show(context, message);
   }
 
   void _showSaved(String message) {
     if (!mounted) return;
-    final accent = Theme.of(context).colorScheme.primary;
-    _showSnack(
-      Row(
-        children: [
-          Icon(Icons.check_rounded, color: accent),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: accent,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+    AppSnackBar.success(context, message);
   }
 
   Future<void> _confirmLeave() async {
@@ -145,7 +127,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           await _profileService.clearIcon();
           _showSaved('Everyone sees your initial again');
         } on ProfileServiceException catch (e) {
-          _showSnack(Text(e.message));
+          _showSnack(e.message);
         }
     }
   }
