@@ -37,7 +37,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     widget.roomId,
   );
 
-  // Recounted only when the room's members change.
+  // Recounted only when the room's members change. Known gap, parked for
+  // now: a star given while this screen is open (or since it was built)
+  // doesn't show in "Most starred" until it's reopened.
   Future<Map<String, int>>? _stars;
   String? _starsKey;
 
