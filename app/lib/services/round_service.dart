@@ -35,12 +35,14 @@ class RoundServiceException implements Exception {
 /// exists, not that every guess is finished — which only ever forfeits
 /// the cheater's own guesses.
 ///
-/// The next deadline keeps the room's rhythm: the old deadline plus one
-/// round length, so results always land at the room's usual hour and an
-/// early close makes the next round longer, never shorter. If nobody
-/// opened the room for a while, it's the first such slot still in the
-/// future — round numbers never skip, so every round's drawings still get
-/// their guessing round.
+/// No round ever runs longer than the room's round length. After a
+/// deadline, the next one keeps the room's rhythm: the next slot on its
+/// schedule that's still ahead, so results land at the usual hour even if
+/// nobody opened the room for a while. After an early close it's a fresh
+/// full round from now — building on the old, still-future deadline
+/// instead would stack a round length on top for every early close. Round
+/// numbers never skip, so every round's drawings still get their guessing
+/// round.
 class RoundService {
   RoundService({FirebaseFirestore? firestore, FirebaseAuth? auth})
     : _firestore = firestore ?? FirebaseFirestore.instance,
@@ -192,9 +194,18 @@ class RoundService {
       if (!allDone && !now.isAfter(endsAt)) return;
 
       final length = Duration(hours: room.roundLengthHours);
-      var next = endsAt.add(length);
-      while (!next.isAfter(now)) {
-        next = next.add(length);
+      DateTime next;
+      if (now.isAfter(endsAt)) {
+        // Deadline: keep the room's rhythm — the next slot on its
+        // schedule that's still ahead (at most one round length away).
+        next = endsAt.add(length);
+        while (!next.isAfter(now)) {
+          next = next.add(length);
+        }
+      } else {
+        // Early close: a fresh full round from now. Stacking onto the old,
+        // still-future deadline would grow every round past its length.
+        next = now.add(length);
       }
       final nextDeadline = Timestamp.fromDate(next);
 

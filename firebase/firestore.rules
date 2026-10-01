@@ -185,27 +185,24 @@ service cloud.firestore {
       // new one. Over means past the deadline (server time), or everyone
       // the round waits for is done (early close).
       //
-      // The next deadline keeps the room's rhythm: always the old one plus
-      // a whole number of round lengths — one after an early close (so
-      // that round runs long, never short), or the first slot still in the
-      // future if nobody opened the room for a while. Round numbers never
-      // skip, so every round's drawings still get a guessing round.
+      // No round may run longer than the room's round length: the next
+      // deadline is in the future and at most one round length away — the
+      // next slot on the room's schedule after a deadline, or a fresh full
+      // round after an early close (RoundService picks which). The extra
+      // hour is clock-skew slack, since it's computed on a phone. Round
+      // numbers never skip, so every round's drawings still get a
+      // guessing round.
       function everyoneDone(round) {
         return round.requiredUids.size() > 0
           && round.doneUids.hasAll(round.requiredUids);
       }
 
       function nextDeadlineOk() {
-        let before = resource.data.roundEndsAt;
         let after = request.resource.data.roundEndsAt;
-        let step = duration.value(resource.data.roundLengthHours, 'h');
-        let gap = after - before;
         return after is timestamp
           && after > request.time
-          && gap.nanos() == 0
-          && gap.seconds() > 0
-          && gap.seconds() % (resource.data.roundLengthHours * 3600) == 0
-          && (after == before + step || after <= request.time + step);
+          && after < request.time
+              + duration.value(resource.data.roundLengthHours + 1, 'h');
       }
 
       allow update: if request.auth != null
