@@ -26,10 +26,7 @@ class RoomCreatedArgs {
 /// Shown right after "Create room". Design.md marks create/join room as
 /// not designed (§5) — this follows the mockup directly.
 ///
-/// Static only: "Share the invite" doesn't call anything yet (a real
-/// share sheet needs a package this app doesn't depend on yet). "Copy
-/// code" is real — it's pure client-side clipboard access, no backend
-/// involved.
+/// Sharing is "Copy code" — there's no share-sheet package in the app.
 class RoomCreatedScreen extends StatelessWidget {
   const RoomCreatedScreen({super.key, required this.args});
 
@@ -147,16 +144,9 @@ class RoomCreatedScreen extends StatelessWidget {
                       const Spacer(),
                       const SizedBox(height: AppSpacing.xl),
                       AppButton(
-                        label: 'Share the invite',
-                        onPressed: () async {},
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Center(
-                        child: TextButton(
-                          onPressed: () => context.pushReplacement(
-                            '${AppRoutes.rooms}/${args.roomId}',
-                          ),
-                          child: const Text('Go to the room'),
+                        label: 'Go to the room',
+                        onPressed: () async => context.pushReplacement(
+                          '${AppRoutes.rooms}/${args.roomId}',
                         ),
                       ),
                     ],
@@ -193,7 +183,10 @@ class _CodeDisplay extends StatelessWidget {
               borderRadius: AppRadius.controlRadius,
               border: Border.all(color: AppColors.ink, width: AppBorders.thick),
             ),
-            child: Text(chars[i], style: Theme.of(context).textTheme.titleLarge),
+            child: Text(
+              chars[i],
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
           ),
         ],
       ],

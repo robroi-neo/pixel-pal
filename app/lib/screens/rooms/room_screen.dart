@@ -10,6 +10,7 @@ import '../../theme/app_colors.dart';
 import '../../theme/app_dimens.dart';
 import '../../utils/clipboard.dart';
 import '../../utils/dashed_path.dart';
+import '../../widgets/app_avatar.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/loading_view.dart';
 import '../../widgets/profile_avatar.dart';
@@ -94,19 +95,9 @@ class _RoomScreenState extends State<RoomScreen> {
               icon: const Icon(Icons.arrow_back_outlined),
               onPressed: () => context.pop(),
             ),
+            // Deleting a room lives on the room list's ⋯ menu only, behind
+            // the dialog that names what everyone loses.
             title: Text(room?.name ?? '', style: textTheme.titleMedium),
-            actions: [
-              if (isOwner)
-                PopupMenuButton<void>(
-                  icon: const Icon(Icons.more_horiz),
-                  itemBuilder: (_) => [
-                    PopupMenuItem(
-                      onTap: () => _confirmDelete(context, room),
-                      child: const Text('Delete room'),
-                    ),
-                  ],
-                ),
-            ],
           ),
           body: SafeArea(
             child: Builder(
@@ -149,39 +140,6 @@ class _RoomScreenState extends State<RoomScreen> {
       },
     );
   }
-
-  Future<void> _confirmDelete(BuildContext context, RoomDetail room) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete this room?'),
-        content: Text(
-          '"${room.name}" will be removed for everyone in it. '
-          "This can't be undone.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !context.mounted) return;
-
-    try {
-      await RoomService().deleteRoom(roomId: room.id, code: room.code);
-      if (context.mounted) context.pop();
-    } on RoomServiceException catch (e) {
-      if (context.mounted) {
-        AppSnackBar.show(context, e.message);
-      }
-    }
-  }
 }
 
 class _RoomBody extends StatelessWidget {
@@ -202,6 +160,9 @@ class _RoomBody extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final emptySlots = (_slotCount - room.memberCount).clamp(0, _slotCount);
     final shownUids = room.memberUids.take(_slotCount).toList();
+    // Rooms hold 8: anyone past the first 4 shows as "+N", same as the
+    // avatar stack on the room list.
+    final overflow = room.memberCount - shownUids.length;
     final started = room.isRoundStarted;
 
     return SingleChildScrollView(
@@ -245,6 +206,7 @@ class _RoomBody extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.sm),
               ],
+              if (overflow > 0) AppAvatar(initials: '+$overflow', size: 40),
               for (var i = 0; i < emptySlots; i++) ...[
                 const _EmptySlot(size: 40),
                 if (i < emptySlots - 1) const SizedBox(width: AppSpacing.sm),

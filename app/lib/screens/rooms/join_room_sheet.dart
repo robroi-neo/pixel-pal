@@ -175,7 +175,7 @@ class _EnteringPanel extends StatelessWidget {
         if (isError) ...[
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'No room uses this code. Codes never contain O, I, or 0.',
+            'No room uses this code. Codes never contain O, I, 0 or 1.',
             style: textTheme.bodySmall?.copyWith(color: AppColors.error),
           ),
         ],
