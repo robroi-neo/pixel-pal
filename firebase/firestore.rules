@@ -125,7 +125,8 @@ service cloud.firestore {
         && request.resource.data.memberPreview.size() == 1
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 40
+        // Same cap as RoomService.maxNameLength.
+        && request.resource.data.name.size() <= 16
         && request.resource.data.code is string
         && request.resource.data.code.size() == 6
         && request.resource.data.canvasSize in [16, 32]

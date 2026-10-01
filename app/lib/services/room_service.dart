@@ -62,6 +62,14 @@ String _generateInviteCode(Random random) {
 /// since rules can't cheaply cross-validate two documents written in the
 /// same client transaction against each other).
 class RoomService {
+  /// Room names fit on a room card at this length. firestore.rules holds
+  /// the same limit.
+  static const maxNameLength = 16;
+
+  static const nameTooLongMessage =
+      'Room names can be up to $maxNameLength characters — try a shorter '
+      'one.';
+
   RoomService({FirebaseFirestore? firestore, FirebaseAuth? auth})
     : _firestore = firestore ?? FirebaseFirestore.instance,
       _auth = auth ?? FirebaseAuth.instance;
@@ -150,7 +158,16 @@ class RoomService {
         tx.update(roomRef, {
           'memberCount': FieldValue.increment(-1),
           'memberUids': FieldValue.arrayRemove([user.uid]),
-          'memberPreview': FieldValue.arrayRemove([initialsFor(displayName)]),
+          'memberPreview': _withoutLeaver(
+            preview: List<String>.from(
+              roomData['memberPreview'] as List? ?? const [],
+            ),
+            memberUids: List<String>.from(
+              roomData['memberUids'] as List? ?? const [],
+            ),
+            uid: user.uid,
+            initials: initialsFor(displayName),
+          ),
         });
         final required = roundData?['requiredUids'] as List? ?? const [];
         if (roundRef != null && required.contains(user.uid)) {
@@ -165,6 +182,29 @@ class RoomService {
     }
   }
 
+  /// The room's preview initials minus exactly one entry — the leaver's.
+  /// Not `arrayRemove`: that drops *every* matching entry, so two players
+  /// with the same initials would both lose theirs. Entries line up with
+  /// [memberUids] (joins append in join order), so the leaver's is the one
+  /// at their position; rooms from before that, which de-duplicated
+  /// initials on join, fall back to dropping a single match.
+  static List<String> _withoutLeaver({
+    required List<String> preview,
+    required List<String> memberUids,
+    required String uid,
+    required String initials,
+  }) {
+    final result = List<String>.from(preview);
+    final index = memberUids.indexOf(uid);
+    if (index >= 0 && index < result.length && result[index] == initials) {
+      result.removeAt(index);
+    } else {
+      final match = result.indexOf(initials);
+      if (match >= 0) result.removeAt(match);
+    }
+    return result;
+  }
+
   Future<CreatedRoom> createRoom({
     required String name,
     required int canvasSize,
@@ -173,6 +213,9 @@ class RoomService {
     final user = _auth.currentUser;
     if (user == null) {
       throw RoomServiceException('Sign in to create a room.');
+    }
+    if (name.length > maxNameLength) {
+      throw RoomServiceException(nameTooLongMessage);
     }
 
     final displayName = displayNameOr(user.displayName);
@@ -342,8 +385,11 @@ class RoomService {
         tx.update(roomRef, {
           'memberCount': FieldValue.increment(1),
           'memberUids': FieldValue.arrayUnion([user.uid]),
+          // Appended, not arrayUnion: arrayUnion skips initials already
+          // there, so two "AL"s would share one entry and the list would
+          // stop lining up with memberUids (see _withoutLeaver).
           if (preview.length < 4)
-            'memberPreview': FieldValue.arrayUnion([initialsFor(displayName)]),
+            'memberPreview': [...preview, initialsFor(displayName)],
         });
 
         return JoinedRoom(roomId: roomId, roomName: room['name'] as String);

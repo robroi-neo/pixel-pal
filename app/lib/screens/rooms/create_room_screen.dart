@@ -31,9 +31,9 @@ enum _RoundLength {
 /// Design.md marks "Create/join room" as not designed (§5) — this screen
 /// follows the mockup directly rather than an existing spec section.
 ///
-/// "Create room" calls the `createRoom` Cloud Functions callable — the
-/// client never writes `rooms/**` directly (Implementations.md "Standing
-/// rules").
+/// "Create room" writes the room straight from the client
+/// ([RoomService.createRoom]) — Spark has no Cloud Functions, so
+/// firestore.rules does the validating.
 class CreateRoomScreen extends StatefulWidget {
   const CreateRoomScreen({super.key});
 
@@ -47,6 +47,16 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   _CanvasSize _canvasSize = _CanvasSize.size32;
   _RoundLength _roundLength = _RoundLength.h24;
 
+  String get _name => _nameController.text.trim();
+  bool get _nameTooLong => _name.length > RoomService.maxNameLength;
+
+  @override
+  void initState() {
+    super.initState();
+    // Live counter and the too-long error as you type.
+    _nameController.addListener(() => setState(() {}));
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -54,7 +64,8 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   }
 
   Future<void> _createRoom() async {
-    final name = _nameController.text.trim();
+    final name = _name;
+    if (_nameTooLong) return; // The field is already showing why.
     try {
       final room = await _roomService.createRoom(
         name: name.isEmpty ? 'Pixel pals' : name,
@@ -106,10 +117,18 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
               const SizedBox(height: AppSpacing.xl),
               _FieldLabel('Room name'),
               const SizedBox(height: AppSpacing.sm),
+              // Not hard-capped with maxLength: a paste that runs over is
+              // kept and explained, rather than silently cut off.
               TextField(
                 controller: _nameController,
                 textCapitalization: TextCapitalization.words,
-                decoration: const InputDecoration(hintText: 'Pixel pals'),
+                decoration: InputDecoration(
+                  hintText: 'Pixel pals',
+                  counterText: '${_name.length}/${RoomService.maxNameLength}',
+                  errorText: _nameTooLong
+                      ? RoomService.nameTooLongMessage
+                      : null,
+                ),
               ),
               const SizedBox(height: AppSpacing.xl),
               _FieldLabel('Canvas size'),
@@ -143,7 +162,11 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                 ],
               ),
               const SizedBox(height: AppSpacing.xl),
-              AppButton(label: 'Create room', onPressed: _createRoom),
+              AppButton(
+                label: 'Create room',
+                enabled: !_nameTooLong,
+                onPressed: _createRoom,
+              ),
             ],
           ),
         ),
