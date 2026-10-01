@@ -113,39 +113,55 @@ class RoundService {
   /// Marks you done if you are, then advances the room if its current
   /// round is over. Best effort: if anything fails (offline, a race), the
   /// next check-in by anyone tries again.
+  ///
+  /// Kept cheap, since every hub/grid open and every finished card calls
+  /// it: the advance transaction only runs when the round is actually
+  /// over, and scoring is skipped once this session knows it's up to date.
   Future<void> checkIn(String roomId) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) return;
 
+    RoomDetail? room;
+    var advanced = false;
     try {
       final snap = await _roomRef(roomId).get();
       if (!snap.exists) return;
-      final room = RoomDetail.fromDoc(snap);
+      room = RoomDetail.fromDoc(snap);
       final n = room.currentRound;
       if (n == null) return;
 
+      var allDone = false;
       if (!room.isRoundLocked) {
         final roundRef = _roundRef(roomId, n);
         final roundSnap = await roundRef.get();
         if (roundSnap.exists) {
           final round = RoundInfo.fromDoc(roundSnap);
+          final done = {...round.doneUids};
           if (round.requiredUids.contains(uid) &&
-              !round.doneUids.contains(uid) &&
+              !done.contains(uid) &&
               await _isDone(roomId, uid, n)) {
             await roundRef.update({
               'doneUids': FieldValue.arrayUnion([uid]),
             });
+            done.add(uid);
           }
+          allDone =
+              round.requiredUids.isNotEmpty &&
+              round.requiredUids.every(done.contains);
         }
       }
 
-      await _tryAdvance(roomId);
+      // Only pay for the transaction when there's something to do.
+      if (room.isRoundLocked || allDone) {
+        advanced = await _tryAdvance(roomId);
+      }
     } on FirebaseException {
       // See the doc comment — the next check-in retries.
     }
     // Whichever round the room is on now, score any results that are out
-    // so the reveal and the leaderboard have them.
-    await ScoreService().ensureScored(roomId);
+    // so the reveal and the leaderboard have them. Reuses the room read
+    // above unless it just moved on.
+    await ScoreService().ensureScored(roomId, room: advanced ? null : room);
   }
 
   Future<bool> _isDone(String roomId, String uid, int n) async {
@@ -172,16 +188,17 @@ class RoundService {
   }
 
   /// Idempotent: if two players get here at once, the transaction retries
-  /// and the second one finds the room already moved on.
-  Future<void> _tryAdvance(String roomId) {
+  /// and the second one finds the room already moved on. True if this call
+  /// moved it.
+  Future<bool> _tryAdvance(String roomId) {
     final roomRef = _roomRef(roomId);
-    return _firestore.runTransaction((tx) async {
+    return _firestore.runTransaction<bool>((tx) async {
       final roomSnap = await tx.get(roomRef);
-      if (!roomSnap.exists) return;
+      if (!roomSnap.exists) return false;
       final room = RoomDetail.fromDoc(roomSnap);
       final n = room.currentRound;
       final endsAt = room.roundEndsAt;
-      if (n == null || endsAt == null) return;
+      if (n == null || endsAt == null) return false;
 
       final roundRef = _roundRef(roomId, n);
       final roundSnap = await tx.get(roundRef);
@@ -191,7 +208,7 @@ class RoundService {
           round.requiredUids.isNotEmpty &&
           round.requiredUids.every(round.doneUids.contains);
       final now = DateTime.now();
-      if (!allDone && !now.isAfter(endsAt)) return;
+      if (!allDone && !now.isAfter(endsAt)) return false;
 
       final length = Duration(hours: room.roundLengthHours);
       DateTime next;
@@ -220,6 +237,7 @@ class RoundService {
         _roundRef(roomId, n + 1),
         _newRound(n + 1, nextDeadline, room.memberUids),
       );
+      return true;
     });
   }
 }

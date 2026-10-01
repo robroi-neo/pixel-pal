@@ -44,17 +44,29 @@ class ScoreService {
         .map((doc) => doc.exists ? RoundScores.fromDoc(doc) : null);
   }
 
+  /// How far each room is known to be scored, this app session. Scored
+  /// rounds never change, so once a room is up to date, a check-in costs
+  /// nothing here until its next results land.
+  static final _scoredThrough = <String, int>{};
+
   /// Scores every round whose results are out but aren't scored yet, in
   /// order — each round's season totals build on the one before, and the
   /// rules only accept round r once round r−1 exists. If another app
   /// scores a round first, carries on from theirs. Best effort: anything
   /// failing just leaves it for the next check-in.
-  Future<void> ensureScored(String roomId) async {
+  ///
+  /// [room], if the caller has just read it, saves reading it again.
+  Future<void> ensureScored(String roomId, {RoomDetail? room}) async {
     try {
-      final roomSnap = await _room(roomId).get();
-      if (!roomSnap.exists) return;
-      final latest = RoomDetail.fromDoc(roomSnap).latestResultsRound;
+      var current = room;
+      if (current == null) {
+        final roomSnap = await _room(roomId).get();
+        if (!roomSnap.exists) return;
+        current = RoomDetail.fromDoc(roomSnap);
+      }
+      final latest = current.latestResultsRound;
       if (latest == null) return;
+      if ((_scoredThrough[roomId] ?? 0) >= latest) return;
 
       final last = await _scores(
         roomId,
@@ -80,6 +92,7 @@ class ScoreService {
           previous = RoundScores.fromDoc(existing);
         }
       }
+      if (previous != null) _scoredThrough[roomId] = previous.round;
     } on FirebaseException {
       // See the doc comment — the next check-in retries.
     }

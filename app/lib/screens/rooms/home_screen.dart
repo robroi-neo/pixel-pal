@@ -36,6 +36,21 @@ class _HomeScreenState extends State<HomeScreen> {
   /// now, only actually deleted once the undo snackbar closes.
   final Set<String> _pendingDeleteIds = {};
 
+  /// One live query for the life of the screen, not a new one per
+  /// rebuild — each rebuild (an undo-delete, the keyboard) would otherwise
+  /// tear the Firestore listener down and start another. Cleared by "Try
+  /// again" to force a fresh one.
+  Stream<List<RoomSummary>>? _rooms;
+  String? _roomsUid;
+
+  Stream<List<RoomSummary>> _roomsFor(String uid) {
+    if (_rooms == null || _roomsUid != uid) {
+      _roomsUid = uid;
+      _rooms = RoomService().watchMyRooms(uid);
+    }
+    return _rooms!;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -92,11 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text('Sign in to see your rooms.', style: textTheme.bodyMedium)
               else
                 StreamBuilder<List<RoomSummary>>(
-                  // A fresh Stream instance every build (nothing here is
-                  // cached), so a bare setState is enough on its own to
-                  // make StreamBuilder detect the changed stream identity
-                  // and resubscribe.
-                  stream: RoomService().watchMyRooms(user.uid),
+                  stream: _roomsFor(user.uid),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
                       return Column(
@@ -107,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: textTheme.bodyMedium,
                           ),
                           TextButton(
-                            onPressed: () => setState(() {}),
+                            onPressed: () => setState(() => _rooms = null),
                             child: const Text('Try again'),
                           ),
                         ],
