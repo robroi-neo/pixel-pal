@@ -314,12 +314,23 @@ class _RoomBody extends StatelessWidget {
           ],
           if (!started) ...[
             const SizedBox(height: AppSpacing.md),
-            if (isOwner)
+            if (isOwner) ...[
               AppButton(
-                label: 'Start round',
+                label: 'Start round 1',
                 onPressed: () async => onStartRound(),
-              )
-            else
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              // The only round anyone starts by hand.
+              Text(
+                'You only do this once. After that, a new round starts on '
+                'its own every ${room.roundLengthHours}h — or sooner, once '
+                "everyone's drawn and guessed.",
+                style: textTheme.bodySmall?.copyWith(
+                  color: AppColors.ink.withValues(alpha: 0.6),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ] else
               Center(
                 child: ProfileBuilder(
                   uid: room.ownerUid,

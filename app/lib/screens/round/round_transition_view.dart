@@ -167,7 +167,7 @@ class _RoundStartViewState extends State<RoundStartView>
                               if (endsAt != null) ...[
                                 const SizedBox(height: AppSpacing.md),
                                 Text(
-                                  'Everything locks ${lockTime(endsAt)}',
+                                  'Round will automatically start ${lockTime(endsAt)}',
                                   textAlign: TextAlign.center,
                                   style: textTheme.bodySmall?.copyWith(
                                     color: accent.withValues(alpha: 0.75),
@@ -184,8 +184,9 @@ class _RoundStartViewState extends State<RoundStartView>
               ),
               _Entrance(
                 animation: _step(0.7, 1),
+                // The round's already running — this just lets you in.
                 child: AccentButton(
-                  label: 'Start round $n',
+                  label: "Let's go",
                   onPressed: widget.onStart,
                 ),
               ),
