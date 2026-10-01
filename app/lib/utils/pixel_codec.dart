@@ -8,8 +8,12 @@ import '../theme/app_palette.dart';
 
 /// Packs a drawing's pixels into a compact base64 string for storage —
 /// one byte per pixel: 0-15 is an index into [AppPalette.colors], 16
-/// means "still empty" (the locked `canvas` fill, per Design.md — a
-/// pixel nobody's painted, distinct from any real palette color).
+/// means "still empty".
+///
+/// Empty *is* white now: `AppColors.canvas` is #FFFFFF, the palette's own
+/// white, so an unpainted pixel encodes as the white swatch and painting
+/// white is the same as leaving it empty. 16 only appears in drawings
+/// made before that change, and still decodes to the canvas fill.
 ///
 /// Implementations.md's real design calls for true nibble-packing (2
 /// pixels per byte, since 16 colors fit in 4 bits) plus base64. This is a
@@ -40,8 +44,9 @@ class PixelCodec {
     ];
   }
 
-  /// Design.md's editor notes: "Submit validates that the canvas isn't
-  /// empty."
+  /// Nothing but the (white) canvas — blank, or painted white only. A
+  /// round drawing may still be submitted blank (the editor asks first);
+  /// the profile icon editor refuses one, since a blank icon is no icon.
   static bool isEmpty(List<Color> pixels) =>
       pixels.every((color) => color == AppColors.canvas);
 }

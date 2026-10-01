@@ -96,9 +96,7 @@ class DrawingService {
     if (user == null) {
       throw DrawingServiceException('Sign in to submit a drawing.');
     }
-    if (PixelCodec.isEmpty(pixels)) {
-      throw DrawingServiceException('Draw something before submitting.');
-    }
+    // A blank canvas is a valid submission — the editor confirms it first.
 
     try {
       await _drawings(roomId, round).doc(user.uid).set({

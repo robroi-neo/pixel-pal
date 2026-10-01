@@ -83,11 +83,7 @@ class _DrawingScreenState extends State<DrawingScreen> {
 
   Future<void> _handleSubmit() async {
     final editor = _editor!;
-    if (PixelCodec.isEmpty(editor.pixels)) {
-      HapticFeedback.lightImpact();
-      AppSnackBar.show(context, 'Draw something first.');
-      return;
-    }
+    // A blank (all-white) canvas is allowed — the sheet just asks twice.
     final confirmed = await _ConfirmSubmitSheet.show(
       context,
       prompt: widget.prompt,
@@ -349,16 +345,26 @@ class _ConfirmSubmitSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    // Empty is white, and white-only counts as blank too — allowed, but
+    // worth a second look before it's locked in.
+    final blank = PixelCodec.isEmpty(pixels);
     return AppSheet(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Send it in?', style: textTheme.headlineMedium),
+          Text(
+            blank ? 'Send a blank canvas?' : 'Send it in?',
+            style: textTheme.headlineMedium,
+          ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            'Everyone guesses your ${prompt.word} in round ${round + 1}. '
-            "It can't be changed after this.",
+            blank
+                ? "There's nothing on it yet. Everyone will have to guess "
+                      'your ${prompt.word} from a blank square in round '
+                      "${round + 1}, and it can't be changed after this."
+                : 'Everyone guesses your ${prompt.word} in round '
+                      "${round + 1}. It can't be changed after this.",
             style: textTheme.bodyMedium?.copyWith(
               color: AppColors.ink.withValues(alpha: 0.75),
             ),
