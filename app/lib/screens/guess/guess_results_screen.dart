@@ -81,9 +81,14 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
     widget.roomId,
     widget.round,
   );
-  late final Stream<RoundScores?> _previousScores = widget.round > 1
+
+  /// Null in round 1 — there's no table before it. Not a one-shot
+  /// `Stream.value(null)`: the pager rebuilds the score stage each time
+  /// it's swiped back to, and a single-subscription stream can't be
+  /// listened to twice.
+  late final Stream<RoundScores?>? _previousScores = widget.round > 1
       ? ScoreService().watchRound(widget.roomId, widget.round - 1)
-      : Stream.value(null);
+      : null;
 
   PageController? _pager;
   int _page = 0;
@@ -324,11 +329,10 @@ class _GuessResultsScreenState extends State<GuessResultsScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-          child: _SegmentBar(
-            // The table is the last segment, reached by leaving here.
-            count: stages.length + 1,
-            filled: _page + 1,
-          ),
+          // One segment per stage on this screen. The table isn't one —
+          // "See the table" leaves for the leaderboard, so a segment for it
+          // could never fill.
+          child: _SegmentBar(count: stages.length, filled: _page + 1),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -836,7 +840,9 @@ class _ScoreStage extends StatelessWidget {
   final RoomDetail room;
   final int round;
   final Stream<RoundScores?> scores;
-  final Stream<RoundScores?> previous;
+
+  /// The table before this round — null when there isn't one.
+  final Stream<RoundScores?>? previous;
   final List<DrawingSubmission> others;
   final DrawingSubmission? mine;
 
@@ -854,10 +860,9 @@ class _ScoreStage extends StatelessWidget {
           builder: (context, previousSnapshot) {
             final now = scoresSnapshot.data;
             if (now == null ||
-                (!previousSnapshot.hasData &&
+                (previous != null &&
                     previousSnapshot.connectionState ==
-                        ConnectionState.waiting &&
-                    round > 1)) {
+                        ConnectionState.waiting)) {
               return _DarkLoading('Tallying round $round…');
             }
             return _scoreBody(context, now, previousSnapshot.data);
