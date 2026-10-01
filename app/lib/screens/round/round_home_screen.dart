@@ -198,18 +198,24 @@ class _RoundHomeScreenState extends State<RoundHomeScreen> {
         ),
         title: Text(room.name, style: Theme.of(context).textTheme.titleMedium),
         actions: [
-          // Owner-only: the invite screen is otherwise unreachable now
-          // that owners land here too.
-          if (isOwner)
-            PopupMenuButton<void>(
-              icon: const Icon(Icons.more_horiz),
-              itemBuilder: (_) => [
+          PopupMenuButton<void>(
+            icon: const Icon(Icons.more_horiz),
+            itemBuilder: (_) => [
+              // Owner-only: the invite screen is otherwise unreachable
+              // now that owners land here too.
+              if (isOwner)
                 PopupMenuItem(
                   onTap: () => context.push('${AppRoutes.rooms}/${room.id}'),
                   child: const Text('Invite players'),
                 ),
-              ],
-            ),
+              PopupMenuItem(
+                onTap: () => context.push(
+                  AppRoutes.howToPlayPath(room.roundLengthHours),
+                ),
+                child: const Text('How to play'),
+              ),
+            ],
+          ),
         ],
       ),
       body: SafeArea(

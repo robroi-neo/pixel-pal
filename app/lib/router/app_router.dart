@@ -13,6 +13,7 @@ import '../screens/auth/register_screen.dart';
 import '../screens/guess/guess_list_screen.dart';
 import '../screens/guess/guess_results_screen.dart';
 import '../screens/guess/guess_screen.dart';
+import '../screens/help/how_to_play_screen.dart';
 import '../screens/leaderboard/leaderboard_screen.dart';
 import '../screens/profile/icon_editor_screen.dart';
 import '../screens/profile/profile_screen.dart';
@@ -91,6 +92,16 @@ class AppRoutes {
       startAt == null
       ? '$rooms/$roomId/rounds/$round/results'
       : '$rooms/$roomId/rounds/$round/results?drawing=$startAt';
+
+  /// The how-to-play pager. `?h=` is the room's round length in hours,
+  /// so the explainer quotes the room's own rhythm.
+  static const howToPlay = '/how-to-play';
+
+  /// "The full maths" — every scoring rule, with a worked example.
+  static const howToPlayMaths = '/how-to-play/maths';
+
+  static String howToPlayPath(int roundLengthHours) =>
+      '$howToPlay?h=$roundLengthHours';
 
   static const profile = '/profile';
 
@@ -210,6 +221,17 @@ GoRouter buildAppRouter(AuthService authService) {
         path: AppRoutes.leaderboard,
         builder: (context, state) =>
             LeaderboardScreen(roomId: state.pathParameters['roomId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.howToPlay,
+        builder: (context, state) => HowToPlayScreen(
+          roundLengthHours:
+              int.tryParse(state.uri.queryParameters['h'] ?? '') ?? 24,
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.howToPlayMaths,
+        builder: (context, state) => const FullMathsScreen(),
       ),
       GoRoute(
         path: AppRoutes.profile,
