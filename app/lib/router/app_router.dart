@@ -166,6 +166,10 @@ GoRouter buildAppRouter(AuthService authService) {
       ),
       GoRoute(
         path: AppRoutes.roomCreated,
+        // `extra` doesn't survive a web reload or a deep link — and the
+        // room is in the list by then anyway.
+        redirect: (context, state) =>
+            state.extra is RoomCreatedArgs ? null : AppRoutes.home,
         builder: (context, state) =>
             RoomCreatedScreen(args: state.extra! as RoomCreatedArgs),
       ),
@@ -188,6 +192,14 @@ GoRouter buildAppRouter(AuthService authService) {
       ),
       GoRoute(
         path: AppRoutes.draw,
+        // Without the picked prompt (a web reload, a deep link), go back
+        // to the round's prompts — they're saved, so it's the same three.
+        redirect: (context, state) => state.extra is Prompt
+            ? null
+            : AppRoutes.promptPickPath(
+                state.pathParameters['roomId']!,
+                int.parse(state.pathParameters['round']!),
+              ),
         builder: (context, state) => DrawingScreen(
           roomId: state.pathParameters['roomId']!,
           round: int.parse(state.pathParameters['round']!),
